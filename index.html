@@ -989,8 +989,13 @@ function SavedSamples({S, compact}){
 
   function doSave(){
     const r=S.saveCurrentSample(name.trim());
-    if(!r.ok){ setMsg({t:'err',m:r.msg||'Could not save to this browser. Use “Export” to save a file instead.'}); return; }
-    setMsg({t:'ok',m:(r.replaced?'Updated “':'Saved “')+r.name+'”.'});
+    const downloaded = !!r.rec;
+    if(downloaded) S.exportSavedSample(r.rec);   // also save a copy to disk (your Downloads folder on the C: drive)
+    if(!r.ok){
+      setMsg({t:'err',m:(r.msg||'Could not save to this browser.')+(downloaded?' A file copy was downloaded to your computer.':'')});
+      return;
+    }
+    setMsg({t:'ok',m:(r.replaced?'Updated “':'Saved “')+r.name+'” — to this browser and downloaded a copy to your computer.'});
   }
   function doImport(e){
     const f=e.target.files[0]; if(!f) return;
@@ -1013,9 +1018,7 @@ function SavedSamples({S, compact}){
             value={name} onChange={e=>{setName(e.target.value); setNameEdited(e.target.value.trim()!=='');}}
             disabled={!canSave} style={{flex:'1 1 260px',maxWidth:340}}/>
           <button className="btn teal sm" onClick={doSave} disabled={!canSave}>Save current sample</button>
-          <span className="hint">{list.length>0
-            ? list.length+' saved · load or export them on the Evaluate step.'
-            : 'Saved in this browser · load or export on the Evaluate step.'}</span>
+          <span className="hint">Saves to this browser <b>and</b> downloads a copy to your computer.{list.length>0 ? ' '+list.length+' saved — load on the Evaluate step.' : ''}</span>
         </div>
         {msg && <div className={msg.t==='ok'?'note':'err'} style={{marginTop:8}}>{msg.m}</div>}
       </>
@@ -1034,10 +1037,11 @@ function SavedSamples({S, compact}){
         <button className="btn ghost sm" onClick={()=>fileRef.current.click()}>Import (JSON)…</button>
         <input ref={fileRef} type="file" accept=".json,application/json" style={{display:'none'}} onChange={doImport}/>
       </div>
+      <div className="hint" style={{margin:'-2px 0 8px'}}>“Save current sample” stores it in this browser and downloads a copy to your computer.</div>
       {msg && <div className={msg.t==='ok'?'note':'err'}>{msg.m}</div>}
 
       {list.length===0
-        ? <div className="note">No saved samples yet. Draw a sample on the Select step and click <b>Save current sample</b>, or <b>Import</b> one. Saved samples stay in this browser; use <b>Export</b> for a portable file.</div>
+        ? <div className="note">No saved samples yet. Draw a sample on the Select step and click <b>Save current sample</b> — it saves to this browser and downloads a copy to your computer. You can also <b>Import</b> a previously downloaded file.</div>
         : <div className="scrollx" style={{maxHeight:300}}>
             <table className="data">
               <thead><tr><th>Name</th><th>Saved</th><th className="num">Items</th>
@@ -1166,7 +1170,7 @@ function App(){
     let replaced=false;
     if(i>=0){ rec.id=list[i].id; list[i]=rec; replaced=true; } else list.unshift(rec);
     const ok=persist(list);
-    return {ok, replaced, name, msg: ok?'':'This browser blocked local storage — use Export to save a file instead.'};
+    return {ok, replaced, name, rec, msg: ok?'':'This browser blocked local storage — the downloaded file copy is your record.'};
   }
   function deleteSavedSample(id){ persist(savedSamples.filter(x=>x.id!==id)); }
   function loadSavedSample(rec){
