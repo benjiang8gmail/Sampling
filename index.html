@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Monetary Unit Sampling — Audit Tool</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  :root{
+    --navy:#1b2a4a; --navy-2:#24375f; --teal:#1d7d6e; --teal-2:#25998a;
+    --ink:#1f2933; --muted:#6b7785; --line:#dfe4ea; --bg:#eef1f5;
+    --low:#cfe3e0; --mod:#ded6ee; --hi:#f6d365; --hi-line:#d99b00;
+    --ok:#1d7d6e; --okbg:#e7f4f1; --warn:#b3261e; --warnbg:#fcebea;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+    color:var(--ink);background:var(--bg);font-size:14px;line-height:1.45}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 18px 60px}
+  header.app{background:var(--navy);color:#fff;padding:18px 0 16px;margin-bottom:20px;
+    box-shadow:0 2px 8px rgba(0,0,0,.12)}
+  header.app .wrap{padding-bottom:0}
+  header.app h1{margin:0;font-size:21px;font-weight:600;letter-spacing:.2px}
+  header.app p{margin:4px 0 0;color:#b9c4d6;font-size:13px}
+  .tag{display:inline-block;background:#fff2;border:1px solid #ffffff44;border-radius:4px;
+    padding:1px 7px;font-size:11px;letter-spacing:1px;margin-left:8px;vertical-align:middle}
+
+  .steps{display:flex;gap:8px;margin:0 0 22px;flex-wrap:wrap}
+  .steps button{flex:1 1 0;min-width:200px;text-align:left;cursor:pointer;border:1px solid var(--line);
+    background:#fff;border-radius:8px;padding:12px 14px;display:flex;gap:11px;align-items:center;
+    transition:.12s;color:var(--ink)}
+  .steps button:hover{border-color:#b9c4d6}
+  .steps button.active{border-color:var(--navy);box-shadow:0 0 0 2px #1b2a4a22;background:#fbfcfe}
+  .steps .num{flex:none;width:26px;height:26px;border-radius:50%;background:var(--bg);color:var(--muted);
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+  .steps button.active .num{background:var(--navy);color:#fff}
+  .steps .st{font-weight:600;font-size:13.5px}
+  .steps .sd{color:var(--muted);font-size:12px}
+
+  .card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px 22px;margin-bottom:18px}
+  .card h2{margin:0 0 4px;font-size:16px;color:var(--navy)}
+  .card h2 .step-no{color:var(--teal);font-weight:700}
+  .card .sub{color:var(--muted);margin:0 0 16px;font-size:13px}
+  h3{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:22px 0 10px;
+    border-bottom:1px solid var(--line);padding-bottom:6px}
+
+  .grid{display:grid;gap:14px}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:720px){.g3,.g2{grid-template-columns:1fr}}
+  label.fld{display:block;font-size:12.5px;font-weight:600;color:#445;margin-bottom:5px}
+  .hint{font-size:11.5px;color:var(--muted);font-weight:400}
+  input[type=text],input[type=number],select,textarea{width:100%;padding:9px 10px;border:1px solid var(--line);
+    border-radius:7px;font-size:14px;font-family:inherit;background:#fff;color:var(--ink)}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 2px #1b2a4a22}
+  textarea{resize:vertical;min-height:120px;font-family:"Cascadia Mono",Consolas,monospace;font-size:12.5px}
+  .seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .seg button{flex:1;border:0;background:#fff;padding:9px;cursor:pointer;font-weight:600;color:var(--muted);font-size:13.5px}
+  .seg button.on{background:var(--navy);color:#fff}
+
+  .btn{border:0;border-radius:7px;padding:10px 16px;font-weight:600;font-size:13.5px;cursor:pointer;font-family:inherit}
+  .btn.primary{background:var(--navy);color:#fff}
+  .btn.primary:hover{background:var(--navy-2)}
+  .btn.teal{background:var(--teal);color:#fff}
+  .btn.teal:hover{background:var(--teal-2)}
+  .btn.ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
+  .btn.ghost:hover{border-color:#b9c4d6}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.sm{padding:6px 11px;font-size:12.5px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+  table.mus{border-collapse:separate;border-spacing:0;width:100%;margin:6px 0 2px;font-size:13px}
+  table.mus td,table.mus th{border:1px solid #e4e8ee;padding:8px 6px;text-align:center}
+  .conf-band{background:#cdd4de;color:var(--navy);font-weight:700;border-radius:6px 6px 0 0}
+  .conf-head{background:var(--navy);color:#fff;font-weight:600}
+  .mat-head{background:var(--teal);color:#fff;font-weight:700}
+  .ee-low{background:var(--low);color:#1a3a35;font-weight:700}
+  .ee-mod{background:var(--mod);color:#34295e;font-weight:700}
+  .vlabel{writing-mode:vertical-rl;transform:rotate(180deg);background:#e9edf2;color:#56616e;
+    font-weight:700;font-size:11px;letter-spacing:1px}
+  td.cell{background:#fff;color:var(--ink)}
+  td.cell.hot{background:var(--hi);box-shadow:inset 0 0 0 2px var(--hi-line);font-weight:800}
+
+  table.data{border-collapse:collapse;width:100%;font-size:12.8px;margin-top:6px}
+  table.data th{background:var(--navy);color:#fff;font-weight:600;padding:8px 9px;text-align:left;position:sticky;top:0}
+  table.data td{border-bottom:1px solid var(--line);padding:7px 9px}
+  table.data tr:nth-child(even) td{background:#fafbfc}
+  table.data td.num,table.data th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .scrollx{overflow:auto;max-height:460px;border:1px solid var(--line);border-radius:8px}
+  .key-row td{background:#fff7e0 !important}
+  .pill{display:inline-block;padding:1px 8px;border-radius:20px;font-size:11px;font-weight:700}
+  .pill.key{background:#fbe7b3;color:#7a5b00}
+  .pill.smp{background:#e2ecf6;color:#234e7d}
+
+  .stat{background:#f7f9fb;border:1px solid var(--line);border-radius:9px;padding:13px 15px}
+  .stat .k{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+  .stat .v{font-size:19px;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums}
+  .stat .v.big{font-size:23px}
+  .statgrid{display:grid;gap:12px;grid-template-columns:repeat(4,1fr)}
+  @media(max-width:720px){.statgrid{grid-template-columns:1fr 1fr}}
+
+  .callout{border-radius:9px;padding:14px 16px;margin:14px 0;border:1px solid}
+  .callout.ok{background:var(--okbg);border-color:#bfe3db;color:#0f5247}
+  .callout.warn{background:var(--warnbg);border-color:#f2c9c6;color:#8a1a14}
+  .callout.info{background:#eef4fb;border-color:#cfe0f2;color:#1f3c5f}
+  .callout .ttl{font-weight:700;font-size:14.5px;margin-bottom:3px}
+
+  .note{font-size:12px;color:var(--muted);background:#f7f9fb;border-left:3px solid var(--teal);
+    padding:9px 12px;border-radius:0 6px 6px 0;margin:8px 0}
+  details.method{margin-top:10px}
+  details.method summary{cursor:pointer;font-weight:600;color:var(--navy);font-size:13px}
+  details.method div{font-size:12.5px;color:#3a4654;margin-top:8px;line-height:1.6}
+  details.method code{background:#eef1f5;padding:1px 5px;border-radius:4px;font-size:12px}
+  .err{color:var(--warn);font-size:12.5px;font-weight:600;margin-top:6px}
+  .ftr{text-align:center;color:var(--muted);font-size:11.5px;margin-top:26px;line-height:1.6}
+  .inline-edit{width:120px !important;padding:5px 7px !important;text-align:right}
+  .miss-pos{color:#b3261e;font-weight:600}
+  .miss-neg{color:#1d7d6e;font-weight:600}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/app-jsx" id="app-code">
+const {useState,useEffect,useMemo,useRef} = React;
+
+/* ============================================================
+   MUS sample-size lookup tables (from VAGO DST guidance)
+   rows = materiality %, cols = confidence %
+   ============================================================ */
+const CONF_LEVELS = [65,70,75,80,85,90,95];
+const MAT_LEVELS  = [10,5,3,1];
+const SAMPLE_TABLES = {
+  Low: {
+    65:{10:12,5:24,3:40,1:120}, 70:{10:14,5:28,3:47,1:139},
+    75:{10:17,5:33,3:54,1:161}, 80:{10:19,5:38,3:63,1:189},
+    85:{10:23,5:45,3:75,1:225}, 90:{10:28,5:56,3:93,1:277},
+    95:{10:37,5:74,3:123,1:368},
+  },
+  Moderate: {
+    65:{10:17,5:33,3:55,1:163}, 70:{10:20,5:39,3:65,1:193},
+    75:{10:23,5:46,3:77,1:230}, 80:{10:28,5:56,3:93,1:277},
+    85:{10:35,5:69,3:114,1:341}, 90:{10:44,5:87,3:145,1:433},
+    95:{10:60,5:120,3:200,1:600},
+  }
+};
+
+/* ============================================================
+   Numerical core — Poisson reliability factors via the inverse
+   regularised lower incomplete gamma function.
+   RF(k, conf) = gammaPInv(k+1, conf)   (k = # overstatement errors)
+   ============================================================ */
+function logGamma(x){
+  const c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,
+    771.32342877765313,-176.61502916214059,12.507343278686905,
+    -0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if(x<0.5) return Math.log(Math.PI/Math.sin(Math.PI*x))-logGamma(1-x);
+  x-=1; let a=c[0]; const t=x+7.5;
+  for(let i=1;i<9;i++) a+=c[i]/(x+i);
+  return 0.5*Math.log(2*Math.PI)+(x+0.5)*Math.log(t)-t+Math.log(a);
+}
+// regularised lower incomplete gamma P(a,x)
+function gammaP(a,x){
+  if(x<=0||a<=0) return 0;
+  if(x<a+1){ // series
+    let ap=a,sum=1/a,del=sum;
+    for(let n=0;n<1000;n++){ ap+=1; del*=x/ap; sum+=del;
+      if(Math.abs(del)<Math.abs(sum)*1e-15) break; }
+    return sum*Math.exp(-x+a*Math.log(x)-logGamma(a));
+  } else { // continued fraction for Q=1-P
+    const tiny=1e-300; let b=x+1-a,c=1/tiny,d=1/b,h=d;
+    for(let i=1;i<=1000;i++){ const an=-i*(i-a); b+=2;
+      d=an*d+b; if(Math.abs(d)<tiny)d=tiny;
+      c=b+an/c; if(Math.abs(c)<tiny)c=tiny;
+      d=1/d; const del=d*c; h*=del;
+      if(Math.abs(del-1)<1e-15) break; }
+    return 1-Math.exp(-x+a*Math.log(x)-logGamma(a))*h;
+  }
+}
+// inverse: find x such that gammaP(a,x)=p  (bisection — robust)
+function gammaPInv(a,p){
+  if(p<=0) return 0; if(p>=1) return Infinity;
+  let lo=0,hi=Math.max(a*2,10);
+  let guard=0;
+  while(gammaP(a,hi)<p && guard++<60) hi*=2;
+  for(let i=0;i<200;i++){ const mid=(lo+hi)/2;
+    if(gammaP(a,mid)<p) lo=mid; else hi=mid; }
+  return (lo+hi)/2;
+}
+// confidence as a fraction (0.95). errors k>=0.
+// Round UP to 2 decimals to match published audit reliability-factor tables
+// (the standard convention — conservative, never understates the bound).
+function reliabilityFactor(confFrac,k){ return Math.ceil(gammaPInv(k+1,confFrac)*100 - 1e-9)/100; }
+
+/* ============================================================
+   Helpers
+   ============================================================ */
+const money = (n)=> (n==null||isNaN(n)||!isFinite(n)) ? '—'
+  : (n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-AU',{minimumFractionDigits:2,maximumFractionDigits:2});
+const num0 = (n)=> (n==null||isNaN(n)) ? '—' : Math.round(n).toLocaleString('en-AU');
+const pct = (n)=> (n==null||isNaN(n)) ? '—' : (n*100).toFixed(1)+'%';
+
+function parseAmount(s){
+  if(typeof s==='number') return isFinite(s)?s:NaN;
+  if(s==null) return NaN;
+  let t=String(s).trim(); if(t==='') return NaN;
+  let neg=false;
+  if(/^\(.*\)$/.test(t)){ neg=true; t=t.slice(1,-1).trim(); }   // accounting negatives
+  t=t.replace(/[\s,$£€¥]/g,'');                                  // strip spaces, thousands, currency
+  if(/^-/.test(t)){ neg=true; t=t.slice(1); }                   // only a LEADING minus is negative
+  if(!/^\d*\.?\d+$/.test(t)) return NaN;                         // must be a clean number now (rejects e.g. INV-1001)
+  let v=parseFloat(t);
+  return isNaN(v)?NaN:(neg?-v:v);
+}
+function parseDelimited(text){
+  const firstLine=(text.split(/\r?\n/)[0]||'');
+  const delim=(firstLine.split('\t').length>firstLine.split(',').length)?'\t':',';
+  const rows=[]; let row=[],field='',inQ=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(inQ){
+      if(ch==='"'){ if(text[i+1]==='"'){field+='"';i++;} else inQ=false; }
+      else field+=ch;
+    } else {
+      if(ch==='"') inQ=true;
+      else if(ch===delim){ row.push(field); field=''; }
+      else if(ch==='\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else if(ch==='\r'){}
+      else field+=ch;
+    }
+  }
+  if(field.length>0||row.length>0){ row.push(field); rows.push(row); }
+  return rows.filter(r=>!(r.length===1&&r[0].trim()===''));
+}
+function downloadCSV(filename,rows){
+  const csv=rows.map(r=>r.map(c=>{
+    const s=c==null?'':String(c);
+    return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+  }).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+/* ============================================================
+   MUS systematic (fixed-interval) selection
+   items: [{ref, amount(>0), origIndex}]   amount in book-value $
+   ============================================================ */
+function runSelection(items, interval, randomStart){
+  const selectedMap=new Map();
+  let cumEnd=0, nextHit=randomStart;
+  const order=[];
+  for(const it of items){
+    const start=cumEnd; cumEnd+=it.amount;
+    const hits=[];
+    while(nextHit<=cumEnd+1e-6){ hits.push(nextHit); nextHit+=interval; }
+    if(hits.length>0){
+      const rec={...it, cumStart:start, cumEnd, hits, nHits:hits.length,
+        isKey: it.amount>=interval-1e-6};
+      selectedMap.set(it.origIndex,rec); order.push(rec);
+    }
+  }
+  // safeguard: every item >= interval is a certainty (key) selection
+  for(const it of items){
+    if(it.amount>=interval-1e-6 && !selectedMap.has(it.origIndex)){
+      let c=0; for(const x of items){ if(x.origIndex===it.origIndex) break; c+=x.amount; }
+      const rec={...it, cumStart:c, cumEnd:c+it.amount, hits:[], nHits:1, isKey:true};
+      selectedMap.set(it.origIndex,rec); order.push(rec);
+    }
+  }
+  order.sort((a,b)=>a.cumStart-b.cumStart);
+  return order;
+}
+
+/* ============================================================
+   Evaluation — projection of misstatements (Stringer bound)
+   ============================================================ */
+function evaluateSample(selected, auditedMap, interval, confFrac){
+  const rf=(k)=>reliabilityFactor(confFrac,k);
+  let keyOver=0, keyUnder=0;
+  const overTaints=[], underTaints=[];
+  const rows=selected.map(it=>{
+    const book=it.amount;
+    const raw=auditedMap[it.origIndex];
+    const hasAud = raw!=null && String(raw).trim()!=='' && !isNaN(parseFloat(raw));
+    const audited= hasAud ? parseFloat(raw) : null;
+    const misst  = hasAud ? (book-audited) : 0;       // +ve = overstatement
+    const taint  = (hasAud && book!==0) ? misst/book : 0;
+    let projected;
+    if(it.isKey){ projected=misst;
+      if(misst>0) keyOver+=misst; else if(misst<0) keyUnder+=(-misst);
+    } else { projected=taint*interval;
+      if(taint>0) overTaints.push(taint); else if(taint<0) underTaints.push(-taint);
+    }
+    return {...it, book, audited, hasAud, misst, taint, projected};
+  });
+  overTaints.sort((a,b)=>b-a); underTaints.sort((a,b)=>b-a);
+  const RF0=rf(0);
+  const basicPrecision=RF0*interval;
+  const mleOver = overTaints.reduce((s,t)=>s+t*interval,0)+keyOver;
+  const mleUnder= underTaints.reduce((s,t)=>s+t*interval,0)+keyUnder;
+  let umlSum=RF0; for(let i=0;i<overTaints.length;i++) umlSum+=overTaints[i]*(rf(i+1)-rf(i));
+  const uml=umlSum*interval+keyOver;
+  let llSum=RF0;  for(let i=0;i<underTaints.length;i++) llSum +=underTaints[i]*(rf(i+1)-rf(i));
+  const lowerLimit=llSum*interval+keyUnder;
+  return {rows, basicPrecision, mleOver, mleUnder, netMLE:mleOver-mleUnder,
+    uml, lowerLimit, allowance:uml-mleOver, RF0,
+    nOver:overTaints.length, nUnder:underTaints.length,
+    nKey:selected.filter(s=>s.isKey).length, nTested:rows.filter(r=>r.hasAud).length};
+}
+
+// expose for verification
+window.__MUS={reliabilityFactor,gammaP,gammaPInv,runSelection,evaluateSample,parseAmount};
+
+/* ============================================================
+   UI components
+   ============================================================ */
+function LookupTable({eeKey,label,accent,selConf,selMat}){
+  const data=SAMPLE_TABLES[eeKey];
+  return (
+    <table className="mus">
+      <tbody>
+        <tr><td className="vlabel" rowSpan={6} style={{width:26}}></td>
+          <td></td>
+          <td className="conf-band" colSpan={CONF_LEVELS.length}>Confidence&nbsp;%</td></tr>
+        <tr>
+          <td className={accent}>{label}</td>
+          {CONF_LEVELS.map(c=>(
+            <td key={c} className="conf-head"
+                style={selConf===c?{boxShadow:'inset 0 -3px 0 var(--hi)'}:{}}>{c}%</td>))}
+        </tr>
+        {MAT_LEVELS.map(m=>(
+          <tr key={m}>
+            <td className="mat-head" style={selMat===m?{boxShadow:'inset 3px 0 0 var(--hi)'}:{}}>{m}%</td>
+            {CONF_LEVELS.map(c=>{
+              const hot=(selConf===c&&selMat===m);
+              return <td key={c} className={"cell"+(hot?" hot":"")}>{data[c][m]}</td>;
+            })}
+          </tr>
+        ))}
+        <tr><td colSpan={CONF_LEVELS.length+1} style={{border:'none',padding:'2px'}}></td></tr>
+      </tbody>
+    </table>
+  );
+}
+// vertical "Materiality" caption is faked via first column label rows; keep simple caption below
+function TableBlock({eeKey,label,accent,selConf,selMat,active}){
+  return (
+    <div style={{opacity:active?1:.55,transition:'.15s'}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,margin:'4px 0'}}>
+        <span className={accent} style={{padding:'3px 9px',borderRadius:5}}>{label}</span>
+        {active && <span className="pill smp">in use</span>}
+        <span style={{fontSize:11,color:'var(--muted)'}}>rows = Materiality&nbsp;%&nbsp;·&nbsp;cols = Confidence&nbsp;%</span>
+      </div>
+      <LookupTable eeKey={eeKey} label={label} accent={accent} selConf={selConf} selMat={selMat}/>
+    </div>
+  );
+}
+
+function Stat({k,v,big,tone}){
+  return <div className="stat"><div className="k">{k}</div>
+    <div className={"v"+(big?" big":"")} style={tone?{color:tone}:{}}>{v}</div></div>;
+}
+
+/* ---------------- Step 1: Sample size ---------------- */
+function StepSize({S}){
+  const table=SAMPLE_TABLES[S.ee][S.confidence][S.materiality];
+  return (
+    <div className="card">
+      <h2><span className="step-no">Step 1.</span> Estimate the sample size</h2>
+      <p className="sub">Choose your planning parameters. The required Monetary Unit Sampling
+        sample size is read from the guidance tables below.</p>
+
+      <div className="grid g3">
+        <div>
+          <label className="fld">Expected error level <span className="hint">(EE$)</span></label>
+          <div className="seg">
+            {["Low","Moderate"].map(x=>(
+              <button key={x} className={S.ee===x?"on":""} onClick={()=>S.set({ee:x})}>{x}</button>))}
+          </div>
+          <div className="hint" style={{marginTop:6}}>
+            {S.ee==="Low"?"Few/no misstatements expected.":"Some misstatements expected — larger sample."}
+          </div>
+        </div>
+        <div>
+          <label className="fld">Confidence level</label>
+          <select value={S.confidence} onChange={e=>S.set({confidence:+e.target.value})}>
+            {CONF_LEVELS.map(c=><option key={c} value={c}>{c}%</option>)}
+          </select>
+          <div className="hint" style={{marginTop:6}}>Higher confidence → larger sample.</div>
+        </div>
+        <div>
+          <label className="fld">Materiality <span className="hint">(% of population)</span></label>
+          <select value={S.materiality} onChange={e=>S.set({materiality:+e.target.value})}>
+            {MAT_LEVELS.map(m=><option key={m} value={m}>{m}%</option>)}
+          </select>
+          <div className="hint" style={{marginTop:6}}>Lower materiality → larger sample.</div>
+        </div>
+      </div>
+
+      <div className="callout info" style={{display:'flex',alignItems:'center',gap:18,flexWrap:'wrap'}}>
+        <div>
+          <div className="ttl" style={{marginBottom:2}}>Required sample size</div>
+          <div style={{fontSize:13}}>{S.ee} EE$ · {S.confidence}% confidence · {S.materiality}% materiality</div>
+        </div>
+        <div style={{fontSize:42,fontWeight:800,color:'var(--navy)',lineHeight:1,marginLeft:'auto'}}>{table}</div>
+        <button className="btn teal" onClick={()=>S.set({step:2})}>Use this &rarr; Select sample</button>
+      </div>
+
+      <h3>Guidance tables</h3>
+      <div className="grid g2">
+        <TableBlock eeKey="Low" label="Low EE$" accent="ee-low"
+          selConf={S.confidence} selMat={S.materiality} active={S.ee==="Low"}/>
+        <TableBlock eeKey="Moderate" label="Moderate EE$" accent="ee-mod"
+          selConf={S.confidence} selMat={S.materiality} active={S.ee==="Moderate"}/>
+      </div>
+
+      <div className="note"><b>Dual-purpose testing:</b> where your audit approach includes dual-purpose
+        testing, ensure your sample covers the minimum sample sizes for <i>both</i> the controls and the MUS tables.</div>
+
+      <details className="method"><summary>How the sample size is used</summary>
+        <div>The table gives the number of sample items <code>n</code> for your chosen parameters.
+        In Step&nbsp;2 the <b>sampling interval</b> is calculated as
+        <code>population book value ÷ n</code>. Every item whose book value is greater than or equal to the
+        interval becomes a certainty ("key") selection that is examined in full.</div>
+      </details>
+    </div>
+  );
+}
+
+/* ---------------- Step 2: Select sample ---------------- */
+function StepSelect({S}){
+  const fileRef=useRef();
+  const parsed = useMemo(()=> S.rawData.trim()? parseDelimited(S.rawData):[], [S.rawData]);
+  const headerRow = parsed.length? parsed[0]:[];
+  const colCount = parsed.reduce((m,r)=>Math.max(m,r.length),0);
+  const colNames = S.hasHeader
+    ? Array.from({length:colCount},(_,i)=> (headerRow[i]&&headerRow[i].trim())||("Column "+(i+1)))
+    : Array.from({length:colCount},(_,i)=>"Column "+(i+1));
+  const bodyRows = S.hasHeader? parsed.slice(1):parsed;
+
+  // auto-detect amount + reference columns when data changes
+  useEffect(()=>{
+    if(!parsed.length) return;
+    let best=-1,bestScore=-1;
+    for(let c=0;c<colCount;c++){
+      let good=0; for(const r of bodyRows){ if(!isNaN(parseAmount(r[c]))) good++; }
+      let score=good;
+      if(/amount|value|balance|total|gross|\bnet\b|debit|credit|\$|cost|price|\bsum\b/i.test(colNames[c]||'')) score+=1e6;
+      if(score>bestScore){bestScore=score;best=c;}
+    }
+    let ref=-1,refScore=-1;
+    for(let c=0;c<colCount;c++){
+      if(c===best) continue;
+      let sc = c<best?1:0;
+      if(/ref|id|number|\bno\b|invoice|name|customer|supplier|vendor|description|account|doc/i.test(colNames[c]||'')) sc+=10;
+      if(sc>refScore){refScore=sc;ref=c;}
+    }
+    S.set({amountCol:best<0?0:best, refCol:ref});
+  // eslint-disable-next-line
+  },[S.rawData,S.hasHeader]);
+
+  const pop = useMemo(()=>{
+    const items=[]; let excludedZeroNeg=0, badParse=0;
+    bodyRows.forEach((r,i)=>{
+      const amount=parseAmount(r[S.amountCol]);
+      if(isNaN(amount)){ badParse++; return; }
+      if(amount<=0){ excludedZeroNeg++; return; }
+      items.push({ref: S.refCol>=0 ? (r[S.refCol]??'').toString().trim()||('Row '+(i+1)) : ('Row '+(i+1)),
+        amount, origIndex:i});
+    });
+    const total=items.reduce((s,x)=>s+x.amount,0);
+    return {items,total,count:items.length,excludedZeroNeg,badParse};
+  },[bodyRows,S.amountCol,S.refCol]);
+
+  // keep interval synced to total/sampleSize until user edits it
+  useEffect(()=>{
+    if(!S.intervalTouched && pop.total>0 && S.sampleSize>0)
+      S.set({interval:(pop.total/S.sampleSize).toFixed(2)});
+  // eslint-disable-next-line
+  },[pop.total,S.sampleSize,S.intervalTouched]);
+
+  const intervalNum=parseFloat(S.interval);
+  const startNum=parseFloat(S.randomStart);
+  const intervalOk = intervalNum>0 && isFinite(intervalNum);
+  const startOk = startNum>0 && startNum<=intervalNum+1e-6;
+
+  // auto-populate a random start when the interval is valid and none is set (or it became invalid)
+  useEffect(()=>{
+    if(intervalOk && !(startNum>0 && startNum<=intervalNum+1e-6)){
+      let r=Math.random()*intervalNum; if(r<=0) r=intervalNum*0.5;
+      S.set({randomStart:r.toFixed(2)});
+    }
+  // eslint-disable-next-line
+  },[intervalNum,intervalOk]);
+
+  function genStart(){
+    if(!intervalOk) return;
+    let r=Math.random()*intervalNum; if(r<=0) r=intervalNum*0.5;
+    S.set({randomStart:r.toFixed(2)});
+  }
+  function loadFile(e){
+    const f=e.target.files[0]; if(!f) return;
+    const rd=new FileReader();
+    rd.onload=()=>S.set({rawData:rd.result, intervalTouched:false});
+    rd.readAsText(f);
+  }
+  function loadSample(){
+    const lines=["Reference,Customer,Amount"];
+    let s=987654321; const rnd=()=>{ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; };
+    const N=300;                                            // population >> sample size
+    for(let i=1;i<=N;i++){
+      let v; const r=rnd();
+      if(i<=4) v=Math.round(60000+rnd()*70000);            // a few large balances (become key items)
+      else if(r<0.15) v=Math.round(8000+rnd()*16000);      // some mid-size items
+      else v=Math.round(150+rnd()*6000);                   // many smaller items
+      lines.push(`INV-${1000+i},Customer ${((i*37)%120)+1},${v}`);
+    }
+    S.set({rawData:lines.join("\n"), hasHeader:true, intervalTouched:false, selection:null});
+  }
+  function doSelect(){
+    if(!intervalOk||!startOk||pop.count===0) return;
+    const sel=runSelection(pop.items,intervalNum,startNum);
+    S.set({selection:{items:sel, interval:intervalNum, randomStart:startNum,
+      sampleSize:S.sampleSize, total:pop.total, popCount:pop.count,
+      ee:S.ee, confidence:S.confidence, materiality:S.materiality}, audited:{}});
+  }
+  function exportSel(){
+    const sel=S.selection; if(!sel) return;
+    const meta=[
+      ["Monetary Unit Sampling — selected sample"],
+      ["Expected error",sel.ee+" EE$"],["Confidence",sel.confidence+"%"],
+      ["Materiality",sel.materiality+"%"],["Population items",sel.popCount],
+      ["Population book value",sel.total.toFixed(2)],["Planned sample size",sel.sampleSize],
+      ["Sampling interval",sel.interval.toFixed(2)],["Random start",sel.randomStart.toFixed(2)],
+      ["Items selected",sel.items.length],[""],
+      ["Reference","Book value","Cumulative","Type","Hits"]
+    ];
+    sel.items.forEach(r=>meta.push([r.ref,r.amount.toFixed(2),r.cumEnd.toFixed(2),
+      r.isKey?"Key item (100%)":"Sample item",r.nHits]));
+    downloadCSV("mus-selected-sample.csv",meta);
+  }
+
+  const sel=S.selection;
+  return (
+    <div className="card">
+      <h2><span className="step-no">Step 2.</span> Select the sample (Monetary Unit Sampling)</h2>
+      <p className="sub">Load your population, pick the amount column, set the sampling interval and a random
+        start, then draw a probability-proportional-to-size sample.</p>
+
+      <h3>1 · Population data</h3>
+      <div className="row" style={{marginBottom:8}}>
+        <button className="btn ghost sm" onClick={()=>fileRef.current.click()}>Upload CSV…</button>
+        <input ref={fileRef} type="file" accept=".csv,.tsv,.txt" style={{display:'none'}} onChange={loadFile}/>
+        <button className="btn ghost sm" onClick={loadSample}>Load example data</button>
+        <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12.5,marginLeft:6}}>
+          <input type="checkbox" checked={S.hasHeader} onChange={e=>S.set({hasHeader:e.target.checked})}/>
+          First row is a header
+        </label>
+        {S.rawData && <button className="btn ghost sm" onClick={()=>S.set({rawData:'',selection:null})}>Clear</button>}
+      </div>
+      <textarea placeholder="Paste rows from Excel or a CSV here — e.g.&#10;Reference, Customer, Amount&#10;INV-1001, Acme, 4820.55&#10;INV-1002, Globex, 92140.00"
+        value={S.rawData} onChange={e=>S.set({rawData:e.target.value, intervalTouched:false})}/>
+
+      {parsed.length>0 && (
+        <div className="grid g2" style={{marginTop:12}}>
+          <div>
+            <label className="fld">Amount column <span className="hint">(sampling is based on this)</span></label>
+            <select value={S.amountCol} onChange={e=>S.set({amountCol:+e.target.value,intervalTouched:false})}>
+              {colNames.map((n,i)=><option key={i} value={i}>{n}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="fld">Reference / ID column <span className="hint">(optional)</span></label>
+            <select value={S.refCol} onChange={e=>S.set({refCol:+e.target.value})}>
+              <option value={-1}>— use row number —</option>
+              {colNames.map((n,i)=><option key={i} value={i}>{n}</option>)}
+            </select>
+          </div>
+        </div>
+      )}
+
+      {parsed.length>0 && (
+        <div className="statgrid" style={{marginTop:14}}>
+          <Stat k="Population items" v={num0(pop.count)}/>
+          <Stat k="Population book value" v={money(pop.total)}/>
+          <Stat k="Excluded (≤ 0)" v={num0(pop.excludedZeroNeg)}/>
+          <Stat k="Unparsed rows" v={num0(pop.badParse)}/>
+        </div>
+      )}
+      {parsed.length>0 && (pop.excludedZeroNeg>0||pop.badParse>0) &&
+        <div className="note">Zero, negative or non-numeric items are excluded from the MUS population and
+          should be tested separately (MUS only draws from positive book values).</div>}
+
+      <h3>2 · Sampling parameters</h3>
+      <div className="grid g3">
+        <div>
+          <label className="fld">Sample size (n)</label>
+          <input type="number" value={S.sampleSize}
+            onChange={e=>S.set({sampleSize:Math.max(1,+e.target.value||1),intervalTouched:false})}/>
+          <div className="hint" style={{marginTop:5}}>From Step 1: {S.ee} EE$, {S.confidence}%, {S.materiality}%
+            = <b>{SAMPLE_TABLES[S.ee][S.confidence][S.materiality]}</b>
+            {S.sampleSize!==SAMPLE_TABLES[S.ee][S.confidence][S.materiality] &&
+              <a style={{marginLeft:6,cursor:'pointer',color:'var(--teal)'}}
+                onClick={()=>S.set({sampleSize:SAMPLE_TABLES[S.ee][S.confidence][S.materiality],intervalTouched:false})}>reset</a>}
+          </div>
+        </div>
+        <div>
+          <label className="fld">Sampling interval</label>
+          <input type="number" value={S.interval}
+            onChange={e=>S.set({interval:e.target.value,intervalTouched:true})}/>
+          <div className="hint" style={{marginTop:5}}>
+            {pop.total>0 ? <>Population ÷ n = <b>{money(pop.total/S.sampleSize)}</b></> : "Load data to suggest an interval."}
+            {S.intervalTouched && pop.total>0 &&
+              <a style={{marginLeft:6,cursor:'pointer',color:'var(--teal)'}}
+                onClick={()=>S.set({interval:(pop.total/S.sampleSize).toFixed(2),intervalTouched:false})}>use suggested</a>}
+          </div>
+        </div>
+        <div>
+          <label className="fld">Random start <span className="hint">(0 &lt; start ≤ interval)</span></label>
+          <div className="row" style={{flexWrap:'nowrap'}}>
+            <input type="number" value={S.randomStart} onChange={e=>S.set({randomStart:e.target.value})}/>
+            <button className="btn ghost sm" style={{flex:'none'}} onClick={genStart} disabled={!intervalOk}>↻</button>
+          </div>
+          <div className="hint" style={{marginTop:5}}>Document this for reproducibility.
+            {!startOk && S.randomStart!=='' && <span className="err"> Must be &gt; 0 and ≤ interval.</span>}
+          </div>
+        </div>
+      </div>
+
+      <div className="row" style={{marginTop:16}}>
+        <button className="btn primary" onClick={doSelect}
+          disabled={!intervalOk||!startOk||pop.count===0}>Draw sample</button>
+        {sel && <button className="btn ghost" onClick={exportSel}>Download selected sample (CSV)</button>}
+        {sel && <button className="btn teal" onClick={()=>S.set({step:3})}>Enter audited values &rarr;</button>}
+      </div>
+      {pop.count===0 && parsed.length>0 && <div className="err">No positive book values found — check the amount column.</div>}
+
+      {sel && (
+        <>
+          <h3>Selected sample — {sel.items.length} items
+            ({sel.items.filter(i=>i.isKey).length} key, {sel.items.filter(i=>!i.isKey).length} sample)</h3>
+          <div className="note">Interval <b>{money(sel.interval)}</b> · random start <b>{money(sel.randomStart)}</b> ·
+            every item ≥ the interval is a <b>key item</b> examined in full.</div>
+          <div className="scrollx">
+            <table className="data">
+              <thead><tr>
+                <th>#</th><th>Reference</th><th className="num">Book value</th>
+                <th className="num">Cumulative $</th><th>Type</th><th className="num">Hits</th>
+              </tr></thead>
+              <tbody>
+                {sel.items.map((r,i)=>(
+                  <tr key={i} className={r.isKey?"key-row":""}>
+                    <td>{i+1}</td><td>{r.ref}</td>
+                    <td className="num">{money(r.amount)}</td>
+                    <td className="num">{money(r.cumEnd)}</td>
+                    <td><span className={"pill "+(r.isKey?"key":"smp")}>{r.isKey?"Key (100%)":"Sample"}</span></td>
+                    <td className="num">{r.nHits}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      <details className="method"><summary>Selection methodology</summary>
+        <div>This uses <b>fixed-interval (systematic) Monetary Unit Sampling</b>. Items are listed in the order
+        provided and their book values accumulated. Starting at the random start, a hit is taken every
+        <code>interval</code> dollars; the item that owns each hit dollar is selected — so selection is
+        probability-proportional-to-size. Items whose book value ≥ the interval are guaranteed to be hit and are
+        treated as <b>key items</b> (examined 100%). Reproduce a selection exactly by recording the population
+        order, the interval and the random start.</div>
+      </details>
+    </div>
+  );
+}
+
+/* ---------------- Step 3: Evaluate ---------------- */
+function StepEvaluate({S}){
+  const sel=S.selection;
+  const matTouched=useRef(false);
+  useEffect(()=>{
+    if(sel && !matTouched.current)
+      S.set({materialityDollar:(sel.total*sel.materiality/100).toFixed(2)});
+  // eslint-disable-next-line
+  },[sel]);
+
+  if(!sel) return (
+    <div className="card">
+      <h2><span className="step-no">Step 3.</span> Evaluate &amp; project errors</h2>
+      <div className="callout info">Draw a sample in Step 2 first — the selected items will appear here for you to
+        enter audited values.</div>
+    </div>
+  );
+
+  const confFrac=sel.confidence/100;
+  const ev=useMemo(()=>evaluateSample(sel.items,S.audited,sel.interval,confFrac),
+    [sel,S.audited]);
+  const matDollar=parseFloat(S.materialityDollar)||0;
+  const exceeds=ev.uml>matDollar;
+  const allTested=ev.nTested===sel.items.length;
+
+  function setAud(idx,val){ S.set({audited:{...S.audited,[idx]:val}}); }
+  function fillNoError(){
+    const m={}; sel.items.forEach(it=>m[it.origIndex]=it.amount.toString()); S.set({audited:m});
+  }
+  function exportEval(){
+    const rows=[
+      ["Monetary Unit Sampling — evaluation"],
+      ["Confidence",sel.confidence+"%"],["Sampling interval",sel.interval.toFixed(2)],
+      ["Tolerable misstatement / materiality",matDollar.toFixed(2)],
+      ["Most likely (net) error",ev.netMLE.toFixed(2)],
+      ["Upper misstatement limit (overstatement)",ev.uml.toFixed(2)],
+      ["Basic precision",ev.basicPrecision.toFixed(2)],
+      ["Conclusion",exceeds?"UML exceeds materiality":"UML within materiality"],[""],
+      ["Reference","Book value","Audited value","Misstatement","Tainting %","Projected misstatement","Type"]
+    ];
+    ev.rows.forEach(r=>rows.push([r.ref,r.book.toFixed(2),
+      r.hasAud?r.audited.toFixed(2):"", r.hasAud?r.misst.toFixed(2):"",
+      r.hasAud?(r.taint*100).toFixed(2)+"%":"", r.projected.toFixed(2),
+      r.isKey?"Key item":"Sample item"]));
+    downloadCSV("mus-evaluation.csv",rows);
+  }
+
+  return (
+    <div className="card">
+      <h2><span className="step-no">Step 3.</span> Evaluate &amp; project errors</h2>
+      <p className="sub">Enter the audited (correct) value beside each book value. Misstatements found in the
+        sample are projected to the population.</p>
+
+      <div className="row" style={{marginBottom:6}}>
+        <button className="btn ghost sm" onClick={fillNoError}>Mark all "no error" (audited = book)</button>
+        <span className="hint">Tested {ev.nTested} of {sel.items.length} selected items.</span>
+      </div>
+
+      <div className="scrollx">
+        <table className="data">
+          <thead><tr>
+            <th>#</th><th>Reference</th><th className="num">Book value</th><th className="num">Audited value</th>
+            <th className="num">Misstatement</th><th className="num">Tainting&nbsp;%</th>
+            <th className="num">Projected</th><th>Type</th>
+          </tr></thead>
+          <tbody>
+            {ev.rows.map((r,i)=>(
+              <tr key={i} className={r.isKey?"key-row":""}>
+                <td>{i+1}</td><td>{r.ref}</td>
+                <td className="num">{money(r.book)}</td>
+                <td className="num">
+                  <input className="inline-edit" type="number" placeholder="—"
+                    value={S.audited[r.origIndex]??''} onChange={e=>setAud(r.origIndex,e.target.value)}/>
+                </td>
+                <td className={"num "+(r.hasAud?(r.misst>0?"miss-pos":r.misst<0?"miss-neg":""):"")}>
+                  {r.hasAud?money(r.misst):'—'}</td>
+                <td className="num">{r.hasAud && !r.isKey ? (r.taint*100).toFixed(1)+'%' : '—'}</td>
+                <td className="num">{r.hasAud?money(r.projected):'—'}</td>
+                <td><span className={"pill "+(r.isKey?"key":"smp")}>{r.isKey?"Key":"Sample"}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Projection to the population</h3>
+      <div className="grid g2" style={{alignItems:'start'}}>
+        <div style={{maxWidth:280}}>
+          <label className="fld">Tolerable misstatement / materiality ($)</label>
+          <input type="number" value={S.materialityDollar}
+            onChange={e=>{matTouched.current=true; S.set({materialityDollar:e.target.value});}}/>
+          <div className="hint" style={{marginTop:5}}>Default = {sel.materiality}% × population book value
+            = {money(sel.total*sel.materiality/100)}.</div>
+        </div>
+        <div className="statgrid" style={{gridTemplateColumns:'1fr 1fr'}}>
+          <Stat k="Most likely error (net)" v={money(ev.netMLE)} tone="var(--navy)"/>
+          <Stat k="Upper misstatement limit" big v={money(ev.uml)} tone={exceeds?'var(--warn)':'var(--ok)'}/>
+          <Stat k="Basic precision" v={money(ev.basicPrecision)}/>
+          <Stat k="Allowance for sampling risk" v={money(ev.allowance)}/>
+        </div>
+      </div>
+
+      <div className={"callout "+(exceeds?"warn":"ok")}>
+        <div className="ttl">{exceeds
+          ? "⚠ Upper misstatement limit exceeds materiality"
+          : "✓ Upper misstatement limit is within materiality"}</div>
+        <div>Upper misstatement limit <b>{money(ev.uml)}</b> {exceeds?"exceeds":"is below"} tolerable
+          misstatement <b>{money(matDollar)}</b>
+          {ev.uml? <> (UML is {pct(ev.uml/matDollar)} of materiality)</>:null}.
+          {exceeds
+            ? " The population may be materially misstated — consider proposing adjustments, extending the sample, or further investigation."
+            : " Based on this sample there is no evidence the population is materially misstated at the chosen confidence level."}
+        </div>
+        {ev.mleUnder>0 && <div style={{marginTop:6,fontSize:12.5}}>Note: understatements were also found —
+          most likely understatement {money(ev.mleUnder)}, lower limit {money(ev.lowerLimit)}.</div>}
+        {!allTested && <div style={{marginTop:6,fontSize:12.5}}>Untested items are treated as "no error";
+          enter all audited values before relying on the conclusion.</div>}
+      </div>
+
+      <div className="row">
+        <button className="btn ghost" onClick={exportEval}>Download evaluation (CSV)</button>
+      </div>
+
+      <details className="method"><summary>Projection methodology (Stringer bound)</summary>
+        <div>
+          For each <b>sample item</b> (book value &lt; interval) the <b>tainting</b> =
+          <code>(book − audited) ÷ book</code>, and the <b>projected misstatement</b> =
+          <code>tainting × interval</code>. <b>Key items</b> (book value ≥ interval) are examined in full, so their
+          actual misstatement is used directly. The <b>most likely error</b> is the sum of projected misstatements.<br/><br/>
+          The <b>upper misstatement limit</b> adds an allowance for sampling risk using the Stringer bound:
+          <code>UML = interval × [ R(0) + Σ taintᵢ × (R(i) − R(i−1)) ] + key-item misstatements</code>,
+          where taints are ranked largest first and <code>R(k)</code> is the Poisson reliability factor for
+          <code>k</code> overstatements at {sel.confidence}% confidence (<code>R(0) = {ev.RF0.toFixed(2)}</code>).
+          Overstatements and understatements are evaluated separately. Compare the UML with materiality to conclude.
+        </div>
+      </details>
+    </div>
+  );
+}
+
+/* ---------------- App ---------------- */
+function App(){
+  const [st,setSt]=useState({
+    step:1, ee:"Low", confidence:95, materiality:5,
+    sampleSize:SAMPLE_TABLES.Low[95][5],
+    rawData:"", hasHeader:true, amountCol:0, refCol:0,
+    interval:"", intervalTouched:false, randomStart:"",
+    selection:null, audited:{}, materialityDollar:""
+  });
+  const set=(patch)=>setSt(s=>({...s,...patch}));
+  const S={...st,set};
+
+  // keep sample size synced to the table when planning params change
+  useEffect(()=>{ set({sampleSize:SAMPLE_TABLES[st.ee][st.confidence][st.materiality], intervalTouched:false});
+  // eslint-disable-next-line
+  },[st.ee,st.confidence,st.materiality]);
+
+  const steps=[
+    {n:1,t:"Sample size",d:"Confidence · materiality · EE"},
+    {n:2,t:"Select sample",d:"Probability-proportional-to-size"},
+    {n:3,t:"Evaluate",d:"Project errors to population"},
+  ];
+  return (
+    <>
+      <header className="app"><div className="wrap">
+        <h1>Monetary Unit Sampling <span className="tag">AUDIT TOOL</span></h1>
+        <p>Plan the sample size, draw a probability-proportional-to-size sample, and project misstatements
+          to the population.</p>
+      </div></header>
+      <div className="wrap">
+        <div className="steps">
+          {steps.map(s=>(
+            <button key={s.n} className={st.step===s.n?"active":""} onClick={()=>set({step:s.n})}>
+              <span className="num">{s.n}</span>
+              <span><span className="st">{s.t}</span><br/><span className="sd">{s.d}</span></span>
+            </button>
+          ))}
+        </div>
+        {st.step===1 && <StepSize S={S}/>}
+        {st.step===2 && <StepSelect S={S}/>}
+        {st.step===3 && <StepEvaluate S={S}/>}
+        <div className="ftr">
+          Monetary Unit Sampling tool · calculations run entirely in your browser — no data leaves this page.<br/>
+          Sample-size tables per VAGO DST guidance. Reliability factors use the Poisson distribution.
+          Review outputs with professional judgement.
+        </div>
+      </div>
+    </>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+<script>
+/* Compile the JSX with the CLASSIC runtime (React.createElement) so it runs
+   in a normal, non-module browser script. */
+(function(){
+  try{
+    var el=document.getElementById('app-code');
+    var out=Babel.transform(el.textContent,{presets:[['react',{runtime:'classic'}]]}).code;
+    var s=document.createElement('script'); s.textContent=out; document.body.appendChild(s);
+  }catch(e){
+    console.error(e);
+    document.getElementById('root').innerHTML=
+      '<pre style="color:#b3261e;padding:18px;white-space:pre-wrap;font-family:Consolas,monospace">'+
+      'The tool failed to start:\n\n'+((e&&e.message)||e)+
+      '\n\n(Check your internet connection — the React/Babel libraries load from a CDN.)</pre>';
+  }
+})();
+</script>
+</body>
+</html>
