@@ -33,6 +33,10 @@ Auditing Standards issued by the AUASB — how to evidence (a) the sample-size e
 throughout for detailed substantive testing of supplies and services expenses**. References ASA 530 (Audit
 Sampling), ASA 230 (Audit Documentation), and ASA 320 / 450 / 330 / 500.
 
+Each of Steps 1–3 also includes a live **Example documentation** working-paper note (under the methodology
+section) that updates as you change inputs — modelling how to evidence the sample-size estimate, the selection,
+and the projection on the audit file.
+
 ## Saving & recalling samples
 
 Enter your name in the **Performed by** field (top right) — it is remembered and used in default file names.

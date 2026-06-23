@@ -132,6 +132,13 @@
     color:var(--teal);margin-bottom:5px}
   .docs .example p{margin:3px 0;font-size:12.5px;color:#2c3a42}
   .docs .example .concl{margin-top:7px;padding-top:7px;border-top:1px dashed #cfe3dd;font-weight:600;color:#0f5247}
+  .wp{background:#f4f8f7;border:1px solid #cfe3dd;border-left:3px solid var(--teal);border-radius:0 8px 8px 0;
+    padding:12px 14px;margin:6px 0 2px;font-size:12.5px;color:#2c3a42;line-height:1.6}
+  .wp .lbl{font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--teal);margin-bottom:6px}
+  .wp p{margin:4px 0}
+  .wp b{color:var(--ink)}
+  .wp .muted{color:var(--muted)}
+  .wp .ref{color:var(--muted);font-size:11.5px;margin-top:8px}
 </style>
 </head>
 <body>
@@ -465,6 +472,21 @@ function StepSize({S}){
         <code>population book value ÷ n</code>. Every item whose book value is greater than or equal to the
         interval becomes a certainty ("key") selection that is examined in full.</div>
       </details>
+
+      <h3>Example documentation — sample-size estimate <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· updates with your inputs</span></h3>
+      <div className="wp">
+        <div className="lbl">Working-paper note — supplies &amp; services expenses</div>
+        <p><b>Population &amp; assertion:</b> sample of invoices for supplies and services expenses; testing occurrence
+          and accuracy (overstatement of recorded expenses).</p>
+        <p><b>Method:</b> Monetary Unit Sampling (value-weighted selection) — appropriate for a monetary population
+          where the risk is overstatement.</p>
+        <p><b>Parameters &amp; judgement:</b> {S.ee.toLowerCase()} expected error, <b>{S.confidence}%</b> confidence
+          (sampling risk {100-S.confidence}%) and materiality of <b>{S.materiality}%</b> of the population.</p>
+        <p><b>Result:</b> the required MUS sample size from the DST tables is <b>{table} invoices</b>. The sampling
+          interval (population book value ÷ {table}) is set in Step&nbsp;2; any invoice ≥ the interval is examined in
+          full as a key item, and zero/credit balances are tested separately.</p>
+        <p className="ref">Ref: ASA 530 para 6–7; ASA 320 (materiality); documented per ASA 230 para 8.</p>
+      </div>
     </div>
   );
 }
@@ -590,6 +612,15 @@ function StepSelect({S}){
   }
 
   const sel=S.selection;
+  // live values for the working-paper note (use the drawn sample if present, else current inputs)
+  const noteInterval = sel? sel.interval : intervalNum;
+  const noteStart = sel? sel.randomStart : startNum;
+  const noteCount = sel? sel.popCount : pop.count;
+  const noteTotal = sel? sel.total : pop.total;
+  const noteSize = sel? sel.sampleSize : S.sampleSize;
+  const noteNeg = sel? sel.sampleBasis==='negative' : pop.wantNeg;
+  const amountColName = colNames[S.amountCol]||'Amount';
+  const noteReady = noteCount>0;
   return (
     <div className="card">
       <h2><span className="step-no">Step 2.</span> Select the sample (Monetary Unit Sampling)</h2>
@@ -741,6 +772,22 @@ function StepSelect({S}){
         order, the interval and the random start.</div>
       </details>
 
+      <h3>Example documentation — sample selection <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· updates with your selections</span></h3>
+      <div className="wp">
+        <div className="lbl">Working-paper note — supplies &amp; services expenses</div>
+        {noteReady ? <>
+          <p><b>Method:</b> fixed-interval Monetary Unit Sampling (probability-proportional-to-size), performed with the
+            MUS tool on the "{amountColName}" column, <b>{noteNeg?'negative':'positive'} values</b>.</p>
+          <p><b>Population:</b> {num0(noteCount)} invoices for supplies and services, total {money(noteTotal)}{noteNeg?' (absolute value of credit/negative items)':''}.</p>
+          <p><b>Parameters:</b> sample size {noteSize}; sampling interval {money(noteInterval)} (= population ÷ {noteSize}); random start {money(noteStart)}.</p>
+          {sel
+            ? <p><b>Result:</b> {sel.items.length} invoices selected — {sel.items.filter(i=>i.isKey).length} key items (≥ interval, examined in full) and {sel.items.filter(i=>!i.isKey).length} sample items. Performed by {S.username||'[initials]'} on {new Date().toLocaleDateString('en-AU')}.</p>
+            : <p className="muted">Click <b>Draw sample</b> to record the invoices selected.</p>}
+          <p><b>Reproducibility:</b> the population (in order), the interval and the random start are retained, and the selected invoices are exported to CSV / saved, so the selection can be re-performed.</p>
+        </> : <p className="muted">Load your population and choose the sample basis — this note will populate automatically.</p>}
+        <p className="ref">Ref: ASA 530 para 8 &amp; Appendix 1/4; ASA 230 para 9.</p>
+      </div>
+
       <SavedSamples S={S}/>
     </div>
   );
@@ -773,6 +820,8 @@ function StepEvaluate({S}){
   const matDollar=parseFloat(S.materialityDollar)||0;
   const exceeds=ev.uml>matDollar;
   const allTested=ev.nTested===sel.items.length;
+  const errItems=ev.rows.filter(r=>r.hasAud && Math.abs(r.misst)>1e-6);
+  const basisNeg=sel.sampleBasis==='negative';
 
   function setAud(idx,val){ S.set({audited:{...S.audited,[idx]:val}}); }
   function fillNoError(){
@@ -851,7 +900,6 @@ function StepEvaluate({S}){
           <Stat k="Most likely error (net)" v={money(ev.netMLE)} tone="var(--navy)"/>
           <Stat k="Upper misstatement limit" big v={money(ev.uml)} tone={exceeds?'var(--warn)':'var(--ok)'}/>
           <Stat k="Basic precision" v={money(ev.basicPrecision)}/>
-          <Stat k="Allowance for sampling risk" v={money(ev.allowance)}/>
         </div>
       </div>
 
@@ -889,6 +937,21 @@ function StepEvaluate({S}){
           Overstatements and understatements are evaluated separately. Compare the UML with materiality to conclude.
         </div>
       </details>
+
+      <h3>Example documentation — projection of errors <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· updates as you enter results</span></h3>
+      <div className="wp">
+        <div className="lbl">Working-paper note — supplies &amp; services expenses</div>
+        <p><b>Test:</b> {sel.items.length} invoices for supplies and services ({basisNeg?'credit/negative':'positive'} items) tested for {basisNeg?'misstatement':'overstatement'} by agreeing each invoice to supporting records.</p>
+        <p><b>Misstatements found:</b> {errItems.length===0
+          ? 'none — audited values agreed to recorded values.'
+          : errItems.length+' ('+errItems.slice(0,6).map(e=>e.ref).join(', ')+(errItems.length>6?', …':'')+').'}</p>
+        <p><b>Projection:</b> most likely error {money(ev.netMLE)}; basic precision {money(ev.basicPrecision)}; upper misstatement limit <b>{money(ev.uml)}</b> at {sel.confidence}% confidence.</p>
+        <p><b>Conclusion:</b> {exceeds
+          ? 'the upper misstatement limit exceeds tolerable misstatement ('+money(matDollar)+'), so the population may be materially misstated — request management to investigate and correct, and consider extending the sample.'
+          : 'the upper misstatement limit ('+money(ev.uml)+') is below tolerable misstatement ('+money(matDollar)+'), so there is no evidence the population is materially misstated for '+(basisNeg?'misstatement':'overstatement')+'.'}</p>
+        <p>{Math.abs(ev.netMLE)>1e-6? 'The most likely error of '+money(ev.netMLE)+' was carried to the schedule of misstatements. ' : ''}Performed by {S.username||'[initials]'} on {new Date().toLocaleDateString('en-AU')}.</p>
+        <p className="ref">Ref: ASA 530 para 12–15; ASA 450 (evaluation of misstatements).</p>
+      </div>
 
       <SavedSamples S={S}/>
     </div>
@@ -984,8 +1047,8 @@ function StepDocs(){
           <li><b><AsaRef>ASA 230</AsaRef> Audit Documentation</b> — an experienced auditor with no prior connection
             should understand the work, results and judgements (para 8); record what was tested, and who did and
             reviewed it and when (para 9).</li>
-          <li><b><AsaRef>ASA 320</AsaRef> Materiality</b> &amp; <b><AsaRef>ASA 450</AsaRef> Evaluation of Misstatements</b>
-            — set tolerable misstatement; accumulate and evaluate misstatements against materiality.</li>
+          <li><b><AsaRef>ASA 320</AsaRef> Materiality</b> &amp; <b><AsaRef>ASA 450</AsaRef> Evaluation of Misstatements</b> —
+            set tolerable misstatement; accumulate and evaluate misstatements against materiality.</li>
           <li><b><AsaRef>ASA 330</AsaRef></b> / <b><AsaRef>ASA 500</AsaRef></b> — a substantive procedure that gives
             sufficient appropriate audit evidence.</li>
         </ul>
@@ -1004,8 +1067,8 @@ function StepDocs(){
         <p>Supplies and services expenses, year ended 30 June 2026. Population = all 3,000 expense transactions posted
           to GL 5200, totalling <b>$48,000,000</b>, agreed to the trial balance. Assertion: occurrence and accuracy
           (overstatement).</p>
-        <p>MUS was chosen because the population is monetary and the risk is overstatement. Parameters: <b>Moderate</b>
-          expected error (minor coding errors noted in prior years), <b>95%</b> confidence (material balance, no
+        <p>MUS was chosen because the population is monetary and the risk is overstatement. Parameters: <b>Moderate</b> expected
+          error (minor coding errors noted in prior years), <b>95%</b> confidence (material balance, no
           reliance on controls), materiality <b>5%</b>. Required sample size per the tool's table = <b>120</b>.</p>
       </div>
 
@@ -1023,8 +1086,8 @@ function StepDocs(){
       <div className="example">
         <div className="lbl">Example — supplies &amp; services expenses</div>
         <p>Selected using the MUS tool (v15-07-26), fixed-interval Monetary Unit Sampling on the <b>Amount</b> column,
-          <b> positive</b> values. Population $48,000,000 across 3,000 items; sampling interval <b>$400,000</b>
-          (= 48,000,000 ÷ 120); random start <b>$137,452</b>.</p>
+          <b> positive</b> values. Population $48,000,000 across 3,000 items; sampling interval <b>$400,000</b> (=
+          48,000,000 ÷ 120); random start <b>$137,452</b>.</p>
         <p>Six transactions ≥ $400,000 were taken as <b>key items</b> (examined in full); 114 sample items were selected.
           The sample was exported to <i>bjiang_150726_0914_positive.csv</i> and filed at [WP ref]. The population (in
           order), interval and random start are retained so the selection can be re-performed.</p>
@@ -1044,19 +1107,11 @@ function StepDocs(){
         <p>Testing of the 120 items found two overstatements (both over-billings corrected to the agreed contract price;
           neither an anomaly): <b>INV-2041</b> book $120,000 / audited $108,000 (10.0% taint → projected $40,000);
           <b> INV-2088</b> book $80,000 / audited $78,000 (2.5% taint → projected $10,000). Key items: no misstatements.</p>
-        <p>Most likely error <b>$50,000</b>; basic precision <b>$1,200,000</b>; upper misstatement limit <b>$1,285,500</b>
-          at 95% confidence. Tolerable misstatement = 5% × $48,000,000 = <b>$2,400,000</b>.</p>
+        <p>Most likely error <b>$50,000</b>; basic precision <b>$1,200,000</b>; upper misstatement limit <b>$1,285,500</b> at
+          95% confidence. Tolerable misstatement = 5% × $48,000,000 = <b>$2,400,000</b>.</p>
         <p className="concl">Conclusion: the upper misstatement limit ($1,285,500) is below tolerable misstatement
           ($2,400,000), so supplies and services expenses are not materially misstated for overstatement. The $50,000
           most likely error was carried to the schedule of misstatements. Reviewed by [initials], 18 July 2026.</p>
-      </div>
-
-      <div className="callout ok">
-        <div className="ttl">The experienced-auditor test</div>
-        <div>Taken together, your file should let an experienced auditor with no previous connection to the audit
-          re-perform the selection and the projection and reach the same conclusion without having to ask you to explain
-          it (<AsaRef>ASA 230</AsaRef> para 8). The quickest way to meet this for MUS is to retain the population,
-          interval and random start, together with the tool's exported / saved selection and evaluation.</div>
       </div>
 
       <div className="note"><b>Disclaimer.</b> This is general guidance to help structure your documentation; it is not a
