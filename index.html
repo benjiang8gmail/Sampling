@@ -117,6 +117,13 @@
   .inline-edit{width:120px !important;padding:5px 7px !important;text-align:right}
   .miss-pos{color:#b3261e;font-weight:600}
   .miss-neg{color:#1d7d6e;font-weight:600}
+  .steps button.doc .num{width:auto;padding:0 8px;border-radius:6px;font-size:11px;letter-spacing:.5px}
+  .docs p{font-size:13px;color:#33404e;line-height:1.6;margin:6px 0 8px}
+  .docs ul{margin:4px 0 16px;padding-left:20px}
+  .docs li{font-size:13px;color:#33404e;line-height:1.55;margin-bottom:5px}
+  .docs .callout ul{margin:6px 0 0;padding-left:18px}
+  .asa{display:inline-block;background:#e7f1ee;color:#125e51;border:1px solid #c3e0d8;border-radius:4px;
+    padding:0 6px;font-size:11px;font-weight:700;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -243,6 +250,23 @@ function downloadCSV(filename,rows){
   const a=document.createElement('a'); a.href=url; a.download=filename;
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
+function downloadJSON(filename,obj){
+  const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+/* ---- saved-sample persistence (browser localStorage) ---- */
+const SAVE_KEY='mus_saved_samples_v1';
+function loadSavedSamples(){
+  try{ const r=window.localStorage.getItem(SAVE_KEY); const a=r?JSON.parse(r):[]; return Array.isArray(a)?a:[]; }
+  catch(e){ return []; }
+}
+function writeSavedSamples(list){
+  try{ window.localStorage.setItem(SAVE_KEY,JSON.stringify(list)); return true; }catch(e){ return false; }
+}
+function makeId(){ return 's_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7); }
 
 /* ============================================================
    MUS systematic (fixed-interval) selection
@@ -525,7 +549,8 @@ function StepSelect({S}){
     const sel=runSelection(pop.items,intervalNum,startNum);
     S.set({selection:{items:sel, interval:intervalNum, randomStart:startNum,
       sampleSize:S.sampleSize, total:pop.total, popCount:pop.count,
-      ee:S.ee, confidence:S.confidence, materiality:S.materiality}, audited:{}});
+      ee:S.ee, confidence:S.confidence, materiality:S.materiality},
+      audited:{}, materialityDollar:'', loadedName:''});
   }
   function exportSel(){
     const sel=S.selection; if(!sel) return;
@@ -674,6 +699,8 @@ function StepSelect({S}){
         treated as <b>key items</b> (examined 100%). Reproduce a selection exactly by recording the population
         order, the interval and the random start.</div>
       </details>
+
+      <SavedSamples S={S}/>
     </div>
   );
 }
@@ -683,22 +710,25 @@ function StepEvaluate({S}){
   const sel=S.selection;
   const matTouched=useRef(false);
   useEffect(()=>{
-    if(sel && !matTouched.current)
+    if(sel && !matTouched.current && !S.materialityDollar)
       S.set({materialityDollar:(sel.total*sel.materiality/100).toFixed(2)});
   // eslint-disable-next-line
   },[sel]);
+  // NOTE: all hooks must run unconditionally — sel can become set while this
+  // component is already mounted (via "Load saved sample"), so useMemo must
+  // not sit behind the early return below.
+  const ev=useMemo(()=> sel? evaluateSample(sel.items,S.audited,sel.interval,sel.confidence/100) : null,
+    [sel,S.audited]);
 
   if(!sel) return (
     <div className="card">
       <h2><span className="step-no">Step 3.</span> Evaluate &amp; project errors</h2>
-      <div className="callout info">Draw a sample in Step 2 first — the selected items will appear here for you to
-        enter audited values.</div>
+      <div className="callout info">Draw a sample in Step 2 first, or load a saved sample below — the selected items
+        will appear here for you to enter audited values.</div>
+      <SavedSamples S={S}/>
     </div>
   );
 
-  const confFrac=sel.confidence/100;
-  const ev=useMemo(()=>evaluateSample(sel.items,S.audited,sel.interval,confFrac),
-    [sel,S.audited]);
   const matDollar=parseFloat(S.materialityDollar)||0;
   const exceeds=ev.uml>matDollar;
   const allTested=ev.nTested===sel.items.length;
@@ -730,6 +760,7 @@ function StepEvaluate({S}){
       <h2><span className="step-no">Step 3.</span> Evaluate &amp; project errors</h2>
       <p className="sub">Enter the audited (correct) value beside each book value. Misstatements found in the
         sample are projected to the population.</p>
+      {S.loadedName && <div className="note">Loaded saved sample: <b>{S.loadedName}</b>.</div>}
 
       <div className="row" style={{marginBottom:6}}>
         <button className="btn ghost sm" onClick={fillNoError}>Mark all "no error" (audited = book)</button>
@@ -814,6 +845,172 @@ function StepEvaluate({S}){
           Overstatements and understatements are evaluated separately. Compare the UML with materiality to conclude.
         </div>
       </details>
+
+      <SavedSamples S={S}/>
+    </div>
+  );
+}
+
+/* ---------------- Saved samples (save / recall) ---------------- */
+function SavedSamples({S}){
+  const [name,setName]=useState(S.loadedName||"");
+  const [msg,setMsg]=useState(null);
+  const fileRef=useRef();
+  const canSave=!!S.selection;
+
+  function doSave(){
+    const r=S.saveCurrentSample(name.trim());
+    if(!r.ok){ setMsg({t:'err',m:r.msg||'Could not save to this browser. Use “Export” to save a file instead.'}); return; }
+    setMsg({t:'ok',m:(r.replaced?'Updated “':'Saved “')+r.name+'”.'});
+  }
+  function doImport(e){
+    const f=e.target.files[0]; if(!f) return;
+    const rd=new FileReader();
+    rd.onload=()=>{ const r=S.importSavedSample(rd.result);
+      setMsg(r.ok?{t:'ok',m:'Imported '+r.count+' sample(s).'}:{t:'err',m:r.msg||'Could not import that file.'}); };
+    rd.readAsText(f); e.target.value='';
+  }
+
+  const list=S.savedSamples;
+  return (
+    <>
+      <h3>Saved samples <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· stored in this browser</span></h3>
+      <div className="row" style={{marginBottom:8}}>
+        <input type="text" placeholder={canSave?"Name this sample…":"Draw or load a sample to save"}
+          value={name} onChange={e=>setName(e.target.value)} disabled={!canSave} style={{maxWidth:280}}/>
+        <button className="btn teal sm" onClick={doSave} disabled={!canSave}>Save current sample</button>
+        <button className="btn ghost sm" onClick={()=>fileRef.current.click()}>Import (JSON)…</button>
+        <input ref={fileRef} type="file" accept=".json,application/json" style={{display:'none'}} onChange={doImport}/>
+      </div>
+      {msg && <div className={msg.t==='ok'?'note':'err'}>{msg.m}</div>}
+
+      {list.length===0
+        ? <div className="note">No saved samples yet. After you draw a sample, name it and click <b>Save current sample</b>.
+            Saved samples stay in this browser; use <b>Export</b> for a portable file to attach to your working papers.</div>
+        : <div className="scrollx" style={{maxHeight:300}}>
+            <table className="data">
+              <thead><tr><th>Name</th><th>Saved</th><th className="num">Items</th>
+                <th className="num">Interval</th><th>Parameters</th><th>Actions</th></tr></thead>
+              <tbody>
+                {list.map(r=>(
+                  <tr key={r.id}>
+                    <td><b>{r.name}</b></td>
+                    <td>{r.savedAt? new Date(r.savedAt).toLocaleString('en-AU') : '—'}</td>
+                    <td className="num">{r.items?r.items.length:0}</td>
+                    <td className="num">{money(r.interval)}</td>
+                    <td>{r.ee} EE · {r.confidence}% · {r.materiality}%</td>
+                    <td style={{whiteSpace:'nowrap'}}>
+                      <button className="btn primary sm" onClick={()=>S.loadSavedSample(r)}>Load</button>{' '}
+                      <button className="btn ghost sm" onClick={()=>S.exportSavedSample(r)}>Export</button>{' '}
+                      <button className="btn ghost sm"
+                        onClick={()=>{ if(window.confirm('Delete saved sample “'+r.name+'”?')) S.deleteSavedSample(r.id); }}>Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>}
+    </>
+  );
+}
+
+/* ---------------- Documentation guidance (ASA) ---------------- */
+function AsaRef({children}){ return <span className="asa">{children}</span>; }
+function StepDocs(){
+  return (
+    <div className="card docs">
+      <h2><span className="step-no">Documentation.</span> Evidencing your MUS work under the Australian Auditing Standards</h2>
+      <p className="sub">What to record so your sampling work meets the audit-sampling and documentation requirements of the
+        standards issued by the AUASB. Paragraph references are to the compiled standards — confirm against the current
+        versions and apply your office methodology.</p>
+
+      <div className="callout info">
+        <div className="ttl">The standards that apply</div>
+        <ul>
+          <li><b><AsaRef>ASA 530</AsaRef> Audit Sampling</b> — designing, sizing and selecting the sample (para 6–8),
+            performing procedures (para 9–11), the nature and cause of misstatements (para 12–13), projecting
+            misstatements (para 14) and evaluating results (para 15). Monetary Unit Sampling is a value-weighted
+            selection method (Appendix 1; selection methods in Appendix 4).</li>
+          <li><b><AsaRef>ASA 230</AsaRef> Audit Documentation</b> — documentation must let an experienced auditor with no
+            previous connection to the audit understand the nature, timing and extent of the work, the results and
+            evidence obtained, and significant judgements (para 8); record the identifying characteristics of items
+            tested, and who performed and reviewed the work and when (para 9).</li>
+          <li><b><AsaRef>ASA 320</AsaRef> Materiality</b> and <b><AsaRef>ASA 450</AsaRef> Evaluation of Misstatements</b> —
+            the basis for tolerable misstatement, and accumulating and evaluating misstatements (including projected
+            misstatements) against materiality.</li>
+          <li><b><AsaRef>ASA 330</AsaRef> Responses to Assessed Risks</b> and <b><AsaRef>ASA 500</AsaRef> Audit Evidence</b> —
+            the sample is a substantive procedure responding to an assessed risk that must provide sufficient appropriate
+            audit evidence.</li>
+        </ul>
+      </div>
+
+      <h3>(a) Documenting the sample-size estimate</h3>
+      <p>Record enough for a reviewer to understand why the sample is the size it is
+        (<AsaRef>ASA 530</AsaRef> para 6–7; <AsaRef>ASA 230</AsaRef> para 8):</p>
+      <ul>
+        <li>The <b>account/population and assertion</b> tested, and how you established the population is
+          <b> complete</b> and reconciles to the ledger / financial report.</li>
+        <li>The <b>purpose</b> of the test and why MUS (value-weighted selection) is appropriate — typically a test of
+          detail for overstatement of a population of positive balances.</li>
+        <li>The <b>parameters and the judgements behind them</b>: expected error level (Low / Moderate EE$) and why; the
+          <b> confidence level</b> (the complement of the sampling risk accepted); and the <b>materiality / tolerable
+          misstatement</b> applied (link to <AsaRef>ASA 320</AsaRef>).</li>
+        <li>The <b>source of the sample size</b> — the DST sample-size tables as applied by this tool — and the resulting
+          sample size <b>n</b>.</li>
+        <li>How <b>individually significant / key items</b> (≥ the sampling interval) and any items removed from the
+          population (zero, negative or credit balances) are dealt with separately.</li>
+      </ul>
+
+      <h3>(b) Documenting the sample selection — the tool used and how it selects</h3>
+      <p>Record the method and the exact parameters so the selection is <b>reproducible</b> and an experienced auditor
+        could re-perform it (<AsaRef>ASA 530</AsaRef> para 8 and Appendix 1/4; <AsaRef>ASA 230</AsaRef> para 9):</p>
+      <ul>
+        <li><b>Tool used:</b> this <i>Monetary Unit Sampling — Audit Tool</i> (note the version / date), run in the
+          browser with no data leaving the page.</li>
+        <li><b>Method:</b> fixed-interval (systematic) Monetary Unit Sampling — a probability-proportional-to-size,
+          value-weighted method in which each $1 of book value has an equal chance of selection, so larger items are
+          more likely to be chosen.</li>
+        <li><b>Inputs that define the selection:</b> the <b>amount column</b> sampling was based on; the <b>population
+          book value</b> and item count; the <b>sampling interval</b> (population ÷ n, or the interval you entered); and
+          the <b>random start</b>.</li>
+        <li><b>How the tool selects:</b> book values are accumulated in the population's order; from the random start a
+          "hit" is taken every interval dollars, and the item containing each hit dollar is selected. Any item ≥ the
+          interval is a <b>key item</b> selected with certainty and examined in full.</li>
+        <li><b>Reproducibility:</b> retain the population (in its order), the interval and the random start — these three
+          reproduce the sample exactly. Attach the tool's <b>exported CSV / saved sample</b> of selected items, with their
+          identifying references, as the record of items tested (<AsaRef>ASA 230</AsaRef> para 9(a)).</li>
+        <li><b>Who and when:</b> record who performed the selection and the date (<AsaRef>ASA 230</AsaRef> para 9(b)–(c)).</li>
+      </ul>
+
+      <h3>(c) Documenting the projection (extrapolation) of errors to the population</h3>
+      <p>Record the misstatements found, how they were projected, and your conclusion
+        (<AsaRef>ASA 530</AsaRef> para 12–15; <AsaRef>ASA 450</AsaRef>):</p>
+      <ul>
+        <li>For each item, the <b>book value, audited value and misstatement</b>, and the <b>nature and cause</b> of each
+          misstatement — and whether any is an <b>anomaly</b> (<AsaRef>ASA 530</AsaRef> para 12–13).</li>
+        <li>The <b>projection method</b>: for sample items, tainting × interval; for key items, the actual misstatement
+          (no projection). The resulting <b>most likely (projected) error</b> (<AsaRef>ASA 530</AsaRef> para 14).</li>
+        <li>The <b>upper misstatement limit</b> (this tool uses the Stringer bound) and its components — <b>basic
+          precision</b> and the <b>allowance for sampling risk</b> — and the confidence / reliability factors used.</li>
+        <li>Your <b>evaluation and conclusion</b>: comparison of the upper misstatement limit with tolerable
+          misstatement / materiality, whether the population is or may be materially misstated, and your response if it
+          is exceeded — request management to investigate and correct, perform further or extended procedures, and
+          reassess (<AsaRef>ASA 530</AsaRef> para 15).</li>
+        <li>Carry the misstatements (projected, key-item actuals and any uncorrected items) to your <b>schedule of
+          misstatements</b> for evaluation against materiality (<AsaRef>ASA 450</AsaRef>).</li>
+      </ul>
+
+      <div className="callout ok">
+        <div className="ttl">The experienced-auditor test</div>
+        <div>Taken together, your file should let an experienced auditor with no previous connection to the audit
+          re-perform the selection and the projection and reach the same conclusion without having to ask you to explain
+          it (<AsaRef>ASA 230</AsaRef> para 8). The quickest way to meet this for MUS is to retain the population,
+          interval and random start, together with the tool's exported / saved selection and evaluation.</div>
+      </div>
+
+      <div className="note"><b>Disclaimer.</b> This is general guidance to help structure your documentation; it is not a
+        substitute for the standards themselves or your office's methodology. Refer to the current Australian Auditing
+        Standards issued by the AUASB (auasb.gov.au) and exercise professional judgement.</div>
     </div>
   );
 }
@@ -825,10 +1022,57 @@ function App(){
     sampleSize:SAMPLE_TABLES.Low[95][5],
     rawData:"", hasHeader:true, amountCol:0, refCol:0,
     interval:"", intervalTouched:false, randomStart:"",
-    selection:null, audited:{}, materialityDollar:""
+    selection:null, audited:{}, materialityDollar:"", loadedName:""
   });
   const set=(patch)=>setSt(s=>({...s,...patch}));
-  const S={...st,set};
+
+  // ---- saved samples (persist to browser localStorage) ----
+  const [savedSamples,setSavedSamples]=useState(()=>loadSavedSamples());
+  function persist(list){ setSavedSamples(list); return writeSavedSamples(list); }
+  function saveCurrentSample(rawName){
+    const sel=st.selection; if(!sel) return {ok:false,msg:'Draw a sample first.'};
+    const name=(rawName&&rawName.trim())||('Sample '+new Date().toLocaleString('en-AU'));
+    const rec={ id:makeId(), name, savedAt:new Date().toISOString(),
+      ee:sel.ee, confidence:sel.confidence, materiality:sel.materiality,
+      total:sel.total, popCount:sel.popCount, sampleSize:sel.sampleSize,
+      interval:sel.interval, randomStart:sel.randomStart,
+      materialityDollar:st.materialityDollar, audited:st.audited||{},
+      items:sel.items.map(it=>({ref:it.ref,amount:it.amount,origIndex:it.origIndex,
+        cumStart:it.cumStart,cumEnd:it.cumEnd,isKey:it.isKey,nHits:it.nHits})) };
+    const list=[...savedSamples];
+    const i=list.findIndex(x=>(x.name||'').toLowerCase()===name.toLowerCase());
+    let replaced=false;
+    if(i>=0){ rec.id=list[i].id; list[i]=rec; replaced=true; } else list.unshift(rec);
+    const ok=persist(list);
+    return {ok, replaced, name, msg: ok?'':'This browser blocked local storage — use Export to save a file instead.'};
+  }
+  function deleteSavedSample(id){ persist(savedSamples.filter(x=>x.id!==id)); }
+  function loadSavedSample(rec){
+    const selection={ items:rec.items||[], interval:rec.interval, randomStart:rec.randomStart,
+      sampleSize:rec.sampleSize, total:rec.total, popCount:rec.popCount,
+      ee:rec.ee, confidence:rec.confidence, materiality:rec.materiality };
+    set({ selection, audited:rec.audited||{}, materialityDollar:rec.materialityDollar||'',
+      loadedName:rec.name, step:3 });
+  }
+  function exportSavedSample(rec){
+    downloadJSON('mus-sample-'+String(rec.name||'sample').replace(/[^a-z0-9_-]+/gi,'_')+'.json', rec);
+  }
+  function importSavedSample(text){
+    try{
+      const data=JSON.parse(text);
+      let recs=Array.isArray(data)?data:[data];
+      recs=recs.filter(r=>r&&Array.isArray(r.items));
+      if(!recs.length) return {ok:false,msg:'No valid sample found in that file.'};
+      const list=[...savedSamples];
+      recs.forEach(r=>{ r.id=makeId(); if(!r.savedAt) r.savedAt=new Date().toISOString();
+        if(!r.name) r.name='Imported sample'; list.unshift(r); });
+      const ok=persist(list);
+      return {ok, count:recs.length, msg: ok?'':'Imported but could not persist to this browser.'};
+    }catch(e){ return {ok:false,msg:'That file is not valid JSON.'}; }
+  }
+
+  const S={...st,set, savedSamples, saveCurrentSample, deleteSavedSample,
+    loadSavedSample, exportSavedSample, importSavedSample};
 
   // keep sample size synced to the table when planning params change
   useEffect(()=>{ set({sampleSize:SAMPLE_TABLES[st.ee][st.confidence][st.materiality], intervalTouched:false});
@@ -855,10 +1099,16 @@ function App(){
               <span><span className="st">{s.t}</span><br/><span className="sd">{s.d}</span></span>
             </button>
           ))}
+          <button className={"doc"+(st.step===4?" active":"")} onClick={()=>set({step:4})}>
+            <span className="num" style={{background:st.step===4?'var(--teal)':'#e7f1ee',
+              color:st.step===4?'#fff':'var(--teal)'}}>ASA</span>
+            <span><span className="st">Documentation</span><br/><span className="sd">Evidencing your work (AuASB)</span></span>
+          </button>
         </div>
         {st.step===1 && <StepSize S={S}/>}
         {st.step===2 && <StepSelect S={S}/>}
         {st.step===3 && <StepEvaluate S={S}/>}
+        {st.step===4 && <StepDocs/>}
         <div className="ftr">
           Monetary Unit Sampling tool · calculations run entirely in your browser — no data leaves this page.<br/>
           Sample-size tables per VAGO DST guidance. Reliability factors use the Poisson distribution.
