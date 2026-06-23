@@ -139,6 +139,17 @@
   .wp b{color:var(--ink)}
   .wp .muted{color:var(--muted)}
   .wp .ref{color:var(--muted);font-size:11.5px;margin-top:8px}
+  /* keyboard focus visibility (accessibility) */
+  button:focus-visible,a:focus-visible,summary:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{
+    outline:2px solid var(--navy);outline-offset:2px}
+  .steps button:focus-visible{outline-offset:-2px}
+  /* step completion tick in the nav */
+  .steps .done{margin-left:auto;color:var(--ok);font-weight:800;font-size:15px;line-height:1}
+  /* compact save bar */
+  .savebar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:#f7f9fb;border:1px solid var(--line);
+    border-radius:9px;padding:12px 14px}
+  .linklike{cursor:pointer;color:var(--teal);font-weight:600}
+  .linklike:hover{text-decoration:underline}
 </style>
 </head>
 <body>
@@ -394,10 +405,10 @@ function LookupTable({eeKey,label,accent,selConf,selMat}){
 // vertical "Materiality" caption is faked via first column label rows; keep simple caption below
 function TableBlock({eeKey,label,accent,selConf,selMat,active}){
   return (
-    <div style={{opacity:active?1:.55,transition:'.15s'}}>
+    <div>
       <div style={{display:'flex',alignItems:'center',gap:8,margin:'4px 0'}}>
         <span className={accent} style={{padding:'3px 9px',borderRadius:5}}>{label}</span>
-        {active && <span className="pill smp">in use</span>}
+        {active && <span className="pill smp">your selection</span>}
         <span style={{fontSize:11,color:'var(--muted)'}}>rows = Materiality&nbsp;%&nbsp;·&nbsp;cols = Confidence&nbsp;%</span>
       </div>
       <LookupTable eeKey={eeKey} label={label} accent={accent} selConf={selConf} selMat={selMat}/>
@@ -416,15 +427,14 @@ function StepSize({S}){
   return (
     <div className="card">
       <h2><span className="step-no">Step 1.</span> Estimate the sample size</h2>
-      <p className="sub">Choose your planning parameters. The required Monetary Unit Sampling
-        sample size is read from the guidance tables below.</p>
+      <p className="sub">Set your planning parameters; the required sample size is read from the DST guidance table.</p>
 
       <div className="grid g3">
         <div>
           <label className="fld">Expected error level <span className="hint">(EE$)</span></label>
-          <div className="seg">
+          <div className="seg" role="group" aria-label="Expected error level">
             {["Low","Moderate"].map(x=>(
-              <button key={x} className={S.ee===x?"on":""} onClick={()=>S.set({ee:x})}>{x}</button>))}
+              <button key={x} className={S.ee===x?"on":""} aria-pressed={S.ee===x} onClick={()=>S.set({ee:x})}>{x}</button>))}
           </div>
           <div className="hint" style={{marginTop:6}}>
             {S.ee==="Low"?"Few/no misstatements expected.":"Some misstatements expected — larger sample."}
@@ -455,13 +465,16 @@ function StepSize({S}){
         <button className="btn teal" onClick={()=>S.set({step:2})}>Use this &rarr; Select sample</button>
       </div>
 
-      <h3>Guidance tables</h3>
-      <div className="grid g2">
-        <TableBlock eeKey="Low" label="Low EE$" accent="ee-low"
-          selConf={S.confidence} selMat={S.materiality} active={S.ee==="Low"}/>
-        <TableBlock eeKey="Moderate" label="Moderate EE$" accent="ee-mod"
-          selConf={S.confidence} selMat={S.materiality} active={S.ee==="Moderate"}/>
-      </div>
+      <h3>Guidance table</h3>
+      <TableBlock eeKey={S.ee} label={S.ee+" EE$"} accent={S.ee==="Low"?"ee-low":"ee-mod"}
+        selConf={S.confidence} selMat={S.materiality} active/>
+      <details className="method" style={{marginTop:12}}>
+        <summary>Compare with the {S.ee==="Low"?"Moderate":"Low"} EE$ table</summary>
+        <div style={{marginTop:10}}>
+          <TableBlock eeKey={S.ee==="Low"?"Moderate":"Low"} label={(S.ee==="Low"?"Moderate":"Low")+" EE$"}
+            accent={S.ee==="Low"?"ee-mod":"ee-low"} selConf={S.confidence} selMat={S.materiality}/>
+        </div>
+      </details>
 
       <div className="note"><b>Dual-purpose testing:</b> where your audit approach includes dual-purpose
         testing, ensure your sample covers the minimum sample sizes for <i>both</i> the controls and the MUS tables.</div>
@@ -644,10 +657,10 @@ function StepSelect({S}){
       <div className="row" style={{marginTop:12,gap:16,alignItems:'flex-start'}}>
         <div>
           <label className="fld">Sample basis</label>
-          <div className="seg" style={{minWidth:260}}>
-            <button className={S.sampleBasis!=='negative'?"on":""}
+          <div className="seg" style={{minWidth:260}} role="group" aria-label="Sample basis">
+            <button className={S.sampleBasis!=='negative'?"on":""} aria-pressed={S.sampleBasis!=='negative'}
               onClick={()=>S.set({sampleBasis:'positive',intervalTouched:false,selection:null})}>Positive values</button>
-            <button className={S.sampleBasis==='negative'?"on":""}
+            <button className={S.sampleBasis==='negative'?"on":""} aria-pressed={S.sampleBasis==='negative'}
               onClick={()=>S.set({sampleBasis:'negative',intervalTouched:false,selection:null})}>Negative values</button>
           </div>
         </div>
@@ -717,7 +730,8 @@ function StepSelect({S}){
           <label className="fld">Random start <span className="hint">(0 &lt; start ≤ interval)</span></label>
           <div className="row" style={{flexWrap:'nowrap'}}>
             <input type="number" value={S.randomStart} onChange={e=>S.set({randomStart:e.target.value})}/>
-            <button className="btn ghost sm" style={{flex:'none'}} onClick={genStart} disabled={!intervalOk}>↻</button>
+            <button className="btn ghost sm" style={{flex:'none'}} onClick={genStart} disabled={!intervalOk}
+              aria-label="Generate a new random start" title="Generate a new random start">↻</button>
           </div>
           <div className="hint" style={{marginTop:5}}>Document this for reproducibility.
             {!startOk && S.randomStart!=='' && <span className="err"> Must be &gt; 0 and ≤ interval.</span>}
@@ -788,7 +802,7 @@ function StepSelect({S}){
         <p className="ref">Ref: ASA 530 para 8 &amp; Appendix 1/4; ASA 230 para 9.</p>
       </div>
 
-      <SavedSamples S={S}/>
+      <SavedSamples S={S} compact/>
     </div>
   );
 }
@@ -874,6 +888,7 @@ function StepEvaluate({S}){
                 <td className="num">{money(r.book)}</td>
                 <td className="num">
                   <input className="inline-edit" type="number" placeholder="—"
+                    aria-label={"Audited value for "+r.ref}
                     value={S.audited[r.origIndex]??''} onChange={e=>setAud(r.origIndex,e.target.value)}/>
                 </td>
                 <td className={"num "+(r.hasAud?(r.misst>0?"miss-pos":r.misst<0?"miss-neg":""):"")}>
@@ -959,7 +974,7 @@ function StepEvaluate({S}){
 }
 
 /* ---------------- Saved samples (save / recall) ---------------- */
-function SavedSamples({S}){
+function SavedSamples({S, compact}){
   const [name,setName]=useState(S.loadedName||"");
   const [nameEdited,setNameEdited]=useState(!!S.loadedName);
   const [msg,setMsg]=useState(null);
@@ -986,11 +1001,33 @@ function SavedSamples({S}){
   }
 
   const list=S.savedSamples;
+
+  // Compact mode (Select step): just save the sample just drawn.
+  if(compact){
+    return (
+      <>
+        <h3>Save this sample</h3>
+        <div className="savebar">
+          <input type="text" aria-label="Sample name"
+            placeholder={canSave?"Name this sample…":"Draw a sample first"}
+            value={name} onChange={e=>{setName(e.target.value); setNameEdited(e.target.value.trim()!=='');}}
+            disabled={!canSave} style={{flex:'1 1 260px',maxWidth:340}}/>
+          <button className="btn teal sm" onClick={doSave} disabled={!canSave}>Save current sample</button>
+          <span className="hint">{list.length>0
+            ? list.length+' saved · load or export them on the Evaluate step.'
+            : 'Saved in this browser · load or export on the Evaluate step.'}</span>
+        </div>
+        {msg && <div className={msg.t==='ok'?'note':'err'} style={{marginTop:8}}>{msg.m}</div>}
+      </>
+    );
+  }
+
+  // Full mode (Evaluate step): save + load/manage + import.
   return (
     <>
       <h3>Saved samples <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· stored in this browser</span></h3>
       <div className="row" style={{marginBottom:8}}>
-        <input type="text" placeholder={canSave?"Name this sample…":"Draw or load a sample to save"}
+        <input type="text" aria-label="Sample name" placeholder={canSave?"Name this sample…":"Load a saved sample, or import one"}
           value={name} onChange={e=>{setName(e.target.value); setNameEdited(e.target.value.trim()!=='');}}
           disabled={!canSave} style={{maxWidth:280}}/>
         <button className="btn teal sm" onClick={doSave} disabled={!canSave}>Save current sample</button>
@@ -1000,8 +1037,7 @@ function SavedSamples({S}){
       {msg && <div className={msg.t==='ok'?'note':'err'}>{msg.m}</div>}
 
       {list.length===0
-        ? <div className="note">No saved samples yet. After you draw a sample, name it and click <b>Save current sample</b>.
-            Saved samples stay in this browser; use <b>Export</b> for a portable file to attach to your working papers.</div>
+        ? <div className="note">No saved samples yet. Draw a sample on the Select step and click <b>Save current sample</b>, or <b>Import</b> one. Saved samples stay in this browser; use <b>Export</b> for a portable file.</div>
         : <div className="scrollx" style={{maxHeight:300}}>
             <table className="data">
               <thead><tr><th>Name</th><th>Saved</th><th className="num">Items</th>
@@ -1035,9 +1071,8 @@ function StepDocs(){
   return (
     <div className="card docs">
       <h2><span className="step-no">Documentation.</span> Evidencing your MUS work under the Australian Auditing Standards</h2>
-      <p className="sub">A concise guide to what to record so your MUS work meets the AUASB standards, with a worked
-        example throughout for <b>detailed substantive testing (DST) of supplies and services expenses</b>. Paragraph
-        references are to the compiled standards — confirm against the current versions and apply your office methodology.</p>
+      <p className="sub">What to record so your MUS work meets the AUASB standards. Paragraph references are to the
+        compiled standards — confirm against the current versions and apply your office methodology.</p>
 
       <div className="callout info">
         <div className="ttl">The standards that apply</div>
@@ -1054,6 +1089,13 @@ function StepDocs(){
         </ul>
       </div>
 
+      <div className="callout info">
+        <div className="ttl">Worked example on every step</div>
+        <div>Steps 1–3 each show a live <b>working-paper note</b> for a supplies-and-services DST that fills in with
+          your actual figures — copy it straight onto the file. The <b>Record</b> lists below set out what each note
+          should cover.</div>
+      </div>
+
       <h3>(a) Documenting the sample-size estimate</h3>
       <p><b>Record</b> (<AsaRef>ASA 530</AsaRef> para 6–7; <AsaRef>ASA 320</AsaRef>; <AsaRef>ASA 230</AsaRef> para 8):</p>
       <ul className="rec">
@@ -1062,15 +1104,6 @@ function StepDocs(){
         <li>the resulting sample size and its source (this tool's tables);</li>
         <li>how key items and any excluded items are handled.</li>
       </ul>
-      <div className="example">
-        <div className="lbl">Example — supplies &amp; services expenses</div>
-        <p>Supplies and services expenses, year ended 30 June 2026. Population = all 3,000 expense transactions posted
-          to GL 5200, totalling <b>$48,000,000</b>, agreed to the trial balance. Assertion: occurrence and accuracy
-          (overstatement).</p>
-        <p>MUS was chosen because the population is monetary and the risk is overstatement. Parameters: <b>Moderate</b> expected
-          error (minor coding errors noted in prior years), <b>95%</b> confidence (material balance, no
-          reliance on controls), materiality <b>5%</b>. Required sample size per the tool's table = <b>120</b>.</p>
-      </div>
 
       <h3>(b) Documenting the sample selection — the tool used and how it selects</h3>
       <p><b>Record</b> (<AsaRef>ASA 530</AsaRef> para 8 &amp; Appendix 1/4; <AsaRef>ASA 230</AsaRef> para 9):</p>
@@ -1083,16 +1116,6 @@ function StepDocs(){
           sample as the record of items tested;</li>
         <li>who selected it and when.</li>
       </ul>
-      <div className="example">
-        <div className="lbl">Example — supplies &amp; services expenses</div>
-        <p>Selected using the MUS tool (v15-07-26), fixed-interval Monetary Unit Sampling on the <b>Amount</b> column,
-          <b> positive</b> values. Population $48,000,000 across 3,000 items; sampling interval <b>$400,000</b> (=
-          48,000,000 ÷ 120); random start <b>$137,452</b>.</p>
-        <p>Six transactions ≥ $400,000 were taken as <b>key items</b> (examined in full); 114 sample items were selected.
-          The sample was exported to <i>bjiang_150726_0914_positive.csv</i> and filed at [WP ref]. The population (in
-          order), interval and random start are retained so the selection can be re-performed.</p>
-        <p>Selection performed by [initials], 15 July 2026.</p>
-      </div>
 
       <h3>(c) Documenting the projection (extrapolation) of errors to the population</h3>
       <p><b>Record</b> (<AsaRef>ASA 530</AsaRef> para 12–15; <AsaRef>ASA 450</AsaRef>):</p>
@@ -1102,17 +1125,6 @@ function StepDocs(){
         <li>the upper misstatement limit (Stringer bound), basic precision and confidence used;</li>
         <li>the conclusion vs materiality and your response; carry misstatements to the misstatements schedule.</li>
       </ul>
-      <div className="example">
-        <div className="lbl">Example — supplies &amp; services expenses</div>
-        <p>Testing of the 120 items found two overstatements (both over-billings corrected to the agreed contract price;
-          neither an anomaly): <b>INV-2041</b> book $120,000 / audited $108,000 (10.0% taint → projected $40,000);
-          <b> INV-2088</b> book $80,000 / audited $78,000 (2.5% taint → projected $10,000). Key items: no misstatements.</p>
-        <p>Most likely error <b>$50,000</b>; basic precision <b>$1,200,000</b>; upper misstatement limit <b>$1,285,500</b> at
-          95% confidence. Tolerable misstatement = 5% × $48,000,000 = <b>$2,400,000</b>.</p>
-        <p className="concl">Conclusion: the upper misstatement limit ($1,285,500) is below tolerable misstatement
-          ($2,400,000), so supplies and services expenses are not materially misstated for overstatement. The $50,000
-          most likely error was carried to the schedule of misstatements. Reviewed by [initials], 18 July 2026.</p>
-      </div>
 
       <div className="note"><b>Disclaimer.</b> This is general guidance to help structure your documentation; it is not a
         substitute for the standards themselves or your office's methodology. Refer to the current Australian Auditing
@@ -1202,8 +1214,7 @@ function App(){
         style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',gap:16,flexWrap:'wrap'}}>
         <div>
           <h1>Monetary Unit Sampling <span className="tag">AUDIT TOOL</span></h1>
-          <p>Plan the sample size, draw a probability-proportional-to-size sample, and project misstatements
-            to the population.</p>
+          <p>All calculations run in your browser — nothing you enter leaves this page.</p>
         </div>
         <div>
           <label style={{display:'block',fontSize:11,color:'#b9c4d6',marginBottom:3}}>Performed by (used in file names)</label>
@@ -1213,27 +1224,33 @@ function App(){
         </div>
       </div></header>
       <div className="wrap">
-        <div className="steps">
-          {steps.map(s=>(
-            <button key={s.n} className={st.step===s.n?"active":""} onClick={()=>set({step:s.n})}>
-              <span className="num">{s.n}</span>
-              <span><span className="st">{s.t}</span><br/><span className="sd">{s.d}</span></span>
-            </button>
-          ))}
-          <button className={"doc"+(st.step===4?" active":"")} onClick={()=>set({step:4})}>
+        <nav className="steps" aria-label="Workflow">
+          {steps.map(s=>{
+            const done = (s.n===2 && !!st.selection) ||
+                         (s.n===3 && !!st.selection && Object.keys(st.audited||{}).length>0);
+            return (
+              <button key={s.n} className={st.step===s.n?"active":""}
+                aria-current={st.step===s.n?"step":undefined} onClick={()=>set({step:s.n})}>
+                <span className="num">{s.n}</span>
+                <span><span className="st">{s.t}</span><br/><span className="sd">{s.d}</span></span>
+                {done && <span className="done" title="completed" aria-hidden="true">✓</span>}
+              </button>
+            );
+          })}
+          <button className={"doc"+(st.step===4?" active":"")}
+            aria-current={st.step===4?"step":undefined} onClick={()=>set({step:4})}>
             <span className="num" style={{background:st.step===4?'var(--teal)':'#e7f1ee',
               color:st.step===4?'#fff':'var(--teal)'}}>ASA</span>
             <span><span className="st">Documentation</span><br/><span className="sd">Evidencing your work (AuASB)</span></span>
           </button>
-        </div>
+        </nav>
         {st.step===1 && <StepSize S={S}/>}
         {st.step===2 && <StepSelect S={S}/>}
         {st.step===3 && <StepEvaluate S={S}/>}
         {st.step===4 && <StepDocs/>}
         <div className="ftr">
-          Monetary Unit Sampling tool · calculations run entirely in your browser — no data leaves this page.<br/>
-          Sample-size tables per VAGO DST guidance. Reliability factors use the Poisson distribution.
-          Review outputs with professional judgement.
+          Sample-size tables per VAGO DST guidance · reliability factors via the Poisson distribution ·
+          review outputs with professional judgement.
         </div>
       </div>
     </>
