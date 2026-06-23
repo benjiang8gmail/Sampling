@@ -124,6 +124,14 @@
   .docs .callout ul{margin:6px 0 0;padding-left:18px}
   .asa{display:inline-block;background:#e7f1ee;color:#125e51;border:1px solid #c3e0d8;border-radius:4px;
     padding:0 6px;font-size:11px;font-weight:700;white-space:nowrap}
+  .docs .rec{margin:2px 0 10px;padding-left:20px}
+  .docs .rec li{margin-bottom:3px}
+  .docs .example{background:#f4f8f7;border:1px solid #cfe3dd;border-left:3px solid var(--teal);
+    border-radius:0 8px 8px 0;padding:11px 14px;margin:6px 0 20px}
+  .docs .example .lbl{font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
+    color:var(--teal);margin-bottom:5px}
+  .docs .example p{margin:3px 0;font-size:12.5px;color:#2c3a42}
+  .docs .example .concl{margin-top:7px;padding-top:7px;border-top:1px dashed #cfe3dd;font-weight:600;color:#0f5247}
 </style>
 </head>
 <body>
@@ -267,6 +275,13 @@ function writeSavedSamples(list){
   try{ window.localStorage.setItem(SAVE_KEY,JSON.stringify(list)); return true; }catch(e){ return false; }
 }
 function makeId(){ return 's_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7); }
+function pad2(n){ return String(n).padStart(2,'0'); }
+// date + time stamp as ddmmyy_HHMM
+function stamp(){ const d=new Date();
+  return pad2(d.getDate())+pad2(d.getMonth()+1)+String(d.getFullYear()).slice(-2)+'_'+pad2(d.getHours())+pad2(d.getMinutes()); }
+function cleanUser(u){ return (String(u||'').trim().replace(/[^a-z0-9_-]+/gi,'')||'auditor').slice(0,40); }
+// default file/sample name: username_ddmmyy_HHMM_positive|negative
+function baseName(username,basis){ return cleanUser(username)+'_'+stamp()+'_'+(basis==='negative'?'negative':'positive'); }
 
 /* ============================================================
    MUS systematic (fixed-interval) selection
@@ -487,17 +502,18 @@ function StepSelect({S}){
   },[S.rawData,S.hasHeader]);
 
   const pop = useMemo(()=>{
-    const items=[]; let excludedZeroNeg=0, badParse=0;
+    const items=[]; let excludedWrongSign=0, badParse=0;
+    const wantNeg = S.sampleBasis==='negative';
     bodyRows.forEach((r,i)=>{
-      const amount=parseAmount(r[S.amountCol]);
-      if(isNaN(amount)){ badParse++; return; }
-      if(amount<=0){ excludedZeroNeg++; return; }
+      const v=parseAmount(r[S.amountCol]);
+      if(isNaN(v)){ badParse++; return; }
+      if(wantNeg ? v>=0 : v<=0){ excludedWrongSign++; return; }  // keep only the chosen sign
       items.push({ref: S.refCol>=0 ? (r[S.refCol]??'').toString().trim()||('Row '+(i+1)) : ('Row '+(i+1)),
-        amount, origIndex:i});
+        amount:Math.abs(v), signed:v, origIndex:i});            // MUS runs on the absolute amount
     });
     const total=items.reduce((s,x)=>s+x.amount,0);
-    return {items,total,count:items.length,excludedZeroNeg,badParse};
-  },[bodyRows,S.amountCol,S.refCol]);
+    return {items,total,count:items.length,excludedWrongSign,badParse,wantNeg};
+  },[bodyRows,S.amountCol,S.refCol,S.sampleBasis]);
 
   // keep interval synced to total/sampleSize until user edits it
   useEffect(()=>{
@@ -549,23 +565,28 @@ function StepSelect({S}){
     const sel=runSelection(pop.items,intervalNum,startNum);
     S.set({selection:{items:sel, interval:intervalNum, randomStart:startNum,
       sampleSize:S.sampleSize, total:pop.total, popCount:pop.count,
-      ee:S.ee, confidence:S.confidence, materiality:S.materiality},
+      ee:S.ee, confidence:S.confidence, materiality:S.materiality, sampleBasis:S.sampleBasis},
       audited:{}, materialityDollar:'', loadedName:''});
   }
   function exportSel(){
     const sel=S.selection; if(!sel) return;
+    const neg=sel.sampleBasis==='negative';
     const meta=[
       ["Monetary Unit Sampling — selected sample"],
+      ["Performed by",S.username||""],
+      ["Sample basis",neg?"Negative values":"Positive values"],
       ["Expected error",sel.ee+" EE$"],["Confidence",sel.confidence+"%"],
       ["Materiality",sel.materiality+"%"],["Population items",sel.popCount],
-      ["Population book value",sel.total.toFixed(2)],["Planned sample size",sel.sampleSize],
+      ["Population value (absolute)",sel.total.toFixed(2)],["Planned sample size",sel.sampleSize],
       ["Sampling interval",sel.interval.toFixed(2)],["Random start",sel.randomStart.toFixed(2)],
       ["Items selected",sel.items.length],[""],
-      ["Reference","Book value","Cumulative","Type","Hits"]
+      neg ? ["Reference","Amount (absolute)","Original (signed) amount","Cumulative","Type","Hits"]
+          : ["Reference","Book value","Cumulative","Type","Hits"]
     ];
-    sel.items.forEach(r=>meta.push([r.ref,r.amount.toFixed(2),r.cumEnd.toFixed(2),
-      r.isKey?"Key item (100%)":"Sample item",r.nHits]));
-    downloadCSV("mus-selected-sample.csv",meta);
+    sel.items.forEach(r=> meta.push(
+      neg ? [r.ref,r.amount.toFixed(2),(r.signed!=null?r.signed.toFixed(2):''),r.cumEnd.toFixed(2),r.isKey?"Key item (100%)":"Sample item",r.nHits]
+          : [r.ref,r.amount.toFixed(2),r.cumEnd.toFixed(2),r.isKey?"Key item (100%)":"Sample item",r.nHits]));
+    downloadCSV(baseName(S.username,sel.sampleBasis)+".csv",meta);
   }
 
   const sel=S.selection;
@@ -589,6 +610,23 @@ function StepSelect({S}){
       <textarea placeholder="Paste rows from Excel or a CSV here — e.g.&#10;Reference, Customer, Amount&#10;INV-1001, Acme, 4820.55&#10;INV-1002, Globex, 92140.00"
         value={S.rawData} onChange={e=>S.set({rawData:e.target.value, intervalTouched:false})}/>
 
+      <div className="row" style={{marginTop:12,gap:16,alignItems:'flex-start'}}>
+        <div>
+          <label className="fld">Sample basis</label>
+          <div className="seg" style={{minWidth:260}}>
+            <button className={S.sampleBasis!=='negative'?"on":""}
+              onClick={()=>S.set({sampleBasis:'positive',intervalTouched:false,selection:null})}>Positive values</button>
+            <button className={S.sampleBasis==='negative'?"on":""}
+              onClick={()=>S.set({sampleBasis:'negative',intervalTouched:false,selection:null})}>Negative values</button>
+          </div>
+        </div>
+        <div className="hint" style={{maxWidth:420,paddingTop:22}}>
+          {S.sampleBasis==='negative'
+            ? "Sampling the negative population (e.g. credit notes / refunds) on absolute amounts."
+            : "Sampling the positive population — the usual MUS basis for overstatement testing."}
+        </div>
+      </div>
+
       {parsed.length>0 && (
         <div className="grid g2" style={{marginTop:12}}>
           <div>
@@ -609,15 +647,16 @@ function StepSelect({S}){
 
       {parsed.length>0 && (
         <div className="statgrid" style={{marginTop:14}}>
-          <Stat k="Population items" v={num0(pop.count)}/>
-          <Stat k="Population book value" v={money(pop.total)}/>
-          <Stat k="Excluded (≤ 0)" v={num0(pop.excludedZeroNeg)}/>
+          <Stat k={pop.wantNeg?"Negative items":"Population items"} v={num0(pop.count)}/>
+          <Stat k={pop.wantNeg?"Population value (abs)":"Population book value"} v={money(pop.total)}/>
+          <Stat k={pop.wantNeg?"Excluded (≥ 0)":"Excluded (≤ 0)"} v={num0(pop.excludedWrongSign)}/>
           <Stat k="Unparsed rows" v={num0(pop.badParse)}/>
         </div>
       )}
-      {parsed.length>0 && (pop.excludedZeroNeg>0||pop.badParse>0) &&
-        <div className="note">Zero, negative or non-numeric items are excluded from the MUS population and
-          should be tested separately (MUS only draws from positive book values).</div>}
+      {parsed.length>0 && (pop.excludedWrongSign>0||pop.badParse>0) &&
+        <div className="note">{pop.wantNeg
+          ? "Zero, positive or non-numeric items are excluded — only negative items are sampled here, on their absolute amounts."
+          : "Zero, negative or non-numeric items are excluded — MUS draws from positive book values only."} Test any excluded items separately.</div>}
 
       <h3>2 · Sampling parameters</h3>
       <div className="grid g3">
@@ -661,13 +700,15 @@ function StepSelect({S}){
         {sel && <button className="btn ghost" onClick={exportSel}>Download selected sample (CSV)</button>}
         {sel && <button className="btn teal" onClick={()=>S.set({step:3})}>Enter audited values &rarr;</button>}
       </div>
-      {pop.count===0 && parsed.length>0 && <div className="err">No positive book values found — check the amount column.</div>}
+      {pop.count===0 && parsed.length>0 && <div className="err">No {pop.wantNeg?"negative":"positive"} values found — check the amount column and the sample basis.</div>}
 
       {sel && (
         <>
           <h3>Selected sample — {sel.items.length} items
             ({sel.items.filter(i=>i.isKey).length} key, {sel.items.filter(i=>!i.isKey).length} sample)</h3>
-          <div className="note">Interval <b>{money(sel.interval)}</b> · random start <b>{money(sel.randomStart)}</b> ·
+          <div className="note">
+            {sel.sampleBasis==='negative' && <><b>Negative-value basis:</b> amounts shown are absolute values of the selected negative (e.g. credit) items. </>}
+            Interval <b>{money(sel.interval)}</b> · random start <b>{money(sel.randomStart)}</b> ·
             every item ≥ the interval is a <b>key item</b> examined in full.</div>
           <div className="scrollx">
             <table className="data">
@@ -738,8 +779,11 @@ function StepEvaluate({S}){
     const m={}; sel.items.forEach(it=>m[it.origIndex]=it.amount.toString()); S.set({audited:m});
   }
   function exportEval(){
+    const neg=sel.sampleBasis==='negative';
     const rows=[
       ["Monetary Unit Sampling — evaluation"],
+      ["Performed by",S.username||""],
+      ["Sample basis",neg?"Negative values":"Positive values"],
       ["Confidence",sel.confidence+"%"],["Sampling interval",sel.interval.toFixed(2)],
       ["Tolerable misstatement / materiality",matDollar.toFixed(2)],
       ["Most likely (net) error",ev.netMLE.toFixed(2)],
@@ -752,7 +796,7 @@ function StepEvaluate({S}){
       r.hasAud?r.audited.toFixed(2):"", r.hasAud?r.misst.toFixed(2):"",
       r.hasAud?(r.taint*100).toFixed(2)+"%":"", r.projected.toFixed(2),
       r.isKey?"Key item":"Sample item"]));
-    downloadCSV("mus-evaluation.csv",rows);
+    downloadCSV(baseName(S.username,sel.sampleBasis)+"-evaluation.csv",rows);
   }
 
   return (
@@ -854,9 +898,16 @@ function StepEvaluate({S}){
 /* ---------------- Saved samples (save / recall) ---------------- */
 function SavedSamples({S}){
   const [name,setName]=useState(S.loadedName||"");
+  const [nameEdited,setNameEdited]=useState(!!S.loadedName);
   const [msg,setMsg]=useState(null);
   const fileRef=useRef();
   const canSave=!!S.selection;
+
+  // keep the name defaulted to username_ddmmyy_HHMM_basis (reflecting the current
+  // basis) until the user types their own — refreshes whenever the selection changes
+  useEffect(()=>{ if(S.selection && !nameEdited) setName(S.defaultSampleName());
+  // eslint-disable-next-line
+  },[S.selection]);
 
   function doSave(){
     const r=S.saveCurrentSample(name.trim());
@@ -877,7 +928,8 @@ function SavedSamples({S}){
       <h3>Saved samples <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· stored in this browser</span></h3>
       <div className="row" style={{marginBottom:8}}>
         <input type="text" placeholder={canSave?"Name this sample…":"Draw or load a sample to save"}
-          value={name} onChange={e=>setName(e.target.value)} disabled={!canSave} style={{maxWidth:280}}/>
+          value={name} onChange={e=>{setName(e.target.value); setNameEdited(e.target.value.trim()!=='');}}
+          disabled={!canSave} style={{maxWidth:280}}/>
         <button className="btn teal sm" onClick={doSave} disabled={!canSave}>Save current sample</button>
         <button className="btn ghost sm" onClick={()=>fileRef.current.click()}>Import (JSON)…</button>
         <input ref={fileRef} type="file" accept=".json,application/json" style={{display:'none'}} onChange={doImport}/>
@@ -898,7 +950,7 @@ function SavedSamples({S}){
                     <td>{r.savedAt? new Date(r.savedAt).toLocaleString('en-AU') : '—'}</td>
                     <td className="num">{r.items?r.items.length:0}</td>
                     <td className="num">{money(r.interval)}</td>
-                    <td>{r.ee} EE · {r.confidence}% · {r.materiality}%</td>
+                    <td>{r.ee} EE · {r.confidence}% · {r.materiality}% · {r.sampleBasis==='negative'?'neg':'pos'}</td>
                     <td style={{whiteSpace:'nowrap'}}>
                       <button className="btn primary sm" onClick={()=>S.loadSavedSample(r)}>Load</button>{' '}
                       <button className="btn ghost sm" onClick={()=>S.exportSavedSample(r)}>Export</button>{' '}
@@ -920,85 +972,84 @@ function StepDocs(){
   return (
     <div className="card docs">
       <h2><span className="step-no">Documentation.</span> Evidencing your MUS work under the Australian Auditing Standards</h2>
-      <p className="sub">What to record so your sampling work meets the audit-sampling and documentation requirements of the
-        standards issued by the AUASB. Paragraph references are to the compiled standards — confirm against the current
-        versions and apply your office methodology.</p>
+      <p className="sub">A concise guide to what to record so your MUS work meets the AUASB standards, with a worked
+        example throughout for <b>detailed substantive testing (DST) of supplies and services expenses</b>. Paragraph
+        references are to the compiled standards — confirm against the current versions and apply your office methodology.</p>
 
       <div className="callout info">
         <div className="ttl">The standards that apply</div>
         <ul>
-          <li><b><AsaRef>ASA 530</AsaRef> Audit Sampling</b> — designing, sizing and selecting the sample (para 6–8),
-            performing procedures (para 9–11), the nature and cause of misstatements (para 12–13), projecting
-            misstatements (para 14) and evaluating results (para 15). Monetary Unit Sampling is a value-weighted
-            selection method (Appendix 1; selection methods in Appendix 4).</li>
-          <li><b><AsaRef>ASA 230</AsaRef> Audit Documentation</b> — documentation must let an experienced auditor with no
-            previous connection to the audit understand the nature, timing and extent of the work, the results and
-            evidence obtained, and significant judgements (para 8); record the identifying characteristics of items
-            tested, and who performed and reviewed the work and when (para 9).</li>
-          <li><b><AsaRef>ASA 320</AsaRef> Materiality</b> and <b><AsaRef>ASA 450</AsaRef> Evaluation of Misstatements</b> —
-            the basis for tolerable misstatement, and accumulating and evaluating misstatements (including projected
-            misstatements) against materiality.</li>
-          <li><b><AsaRef>ASA 330</AsaRef> Responses to Assessed Risks</b> and <b><AsaRef>ASA 500</AsaRef> Audit Evidence</b> —
-            the sample is a substantive procedure responding to an assessed risk that must provide sufficient appropriate
-            audit evidence.</li>
+          <li><b><AsaRef>ASA 530</AsaRef> Audit Sampling</b> — design/size/select (para 6–8), perform (9–11),
+            misstatements (12–13), project (14), evaluate (15); MUS is value-weighted selection (Appendix 1 &amp; 4).</li>
+          <li><b><AsaRef>ASA 230</AsaRef> Audit Documentation</b> — an experienced auditor with no prior connection
+            should understand the work, results and judgements (para 8); record what was tested, and who did and
+            reviewed it and when (para 9).</li>
+          <li><b><AsaRef>ASA 320</AsaRef> Materiality</b> &amp; <b><AsaRef>ASA 450</AsaRef> Evaluation of Misstatements</b>
+            — set tolerable misstatement; accumulate and evaluate misstatements against materiality.</li>
+          <li><b><AsaRef>ASA 330</AsaRef></b> / <b><AsaRef>ASA 500</AsaRef></b> — a substantive procedure that gives
+            sufficient appropriate audit evidence.</li>
         </ul>
       </div>
 
       <h3>(a) Documenting the sample-size estimate</h3>
-      <p>Record enough for a reviewer to understand why the sample is the size it is
-        (<AsaRef>ASA 530</AsaRef> para 6–7; <AsaRef>ASA 230</AsaRef> para 8):</p>
-      <ul>
-        <li>The <b>account/population and assertion</b> tested, and how you established the population is
-          <b> complete</b> and reconciles to the ledger / financial report.</li>
-        <li>The <b>purpose</b> of the test and why MUS (value-weighted selection) is appropriate — typically a test of
-          detail for overstatement of a population of positive balances.</li>
-        <li>The <b>parameters and the judgements behind them</b>: expected error level (Low / Moderate EE$) and why; the
-          <b> confidence level</b> (the complement of the sampling risk accepted); and the <b>materiality / tolerable
-          misstatement</b> applied (link to <AsaRef>ASA 320</AsaRef>).</li>
-        <li>The <b>source of the sample size</b> — the DST sample-size tables as applied by this tool — and the resulting
-          sample size <b>n</b>.</li>
-        <li>How <b>individually significant / key items</b> (≥ the sampling interval) and any items removed from the
-          population (zero, negative or credit balances) are dealt with separately.</li>
+      <p><b>Record</b> (<AsaRef>ASA 530</AsaRef> para 6–7; <AsaRef>ASA 320</AsaRef>; <AsaRef>ASA 230</AsaRef> para 8):</p>
+      <ul className="rec">
+        <li>the population and assertion, and that the population is complete (ties to the ledger);</li>
+        <li>why MUS, and the parameters with your reasons — expected error, confidence, materiality;</li>
+        <li>the resulting sample size and its source (this tool's tables);</li>
+        <li>how key items and any excluded items are handled.</li>
       </ul>
+      <div className="example">
+        <div className="lbl">Example — supplies &amp; services expenses</div>
+        <p>Supplies and services expenses, year ended 30 June 2026. Population = all 3,000 expense transactions posted
+          to GL 5200, totalling <b>$48,000,000</b>, agreed to the trial balance. Assertion: occurrence and accuracy
+          (overstatement).</p>
+        <p>MUS was chosen because the population is monetary and the risk is overstatement. Parameters: <b>Moderate</b>
+          expected error (minor coding errors noted in prior years), <b>95%</b> confidence (material balance, no
+          reliance on controls), materiality <b>5%</b>. Required sample size per the tool's table = <b>120</b>.</p>
+      </div>
 
       <h3>(b) Documenting the sample selection — the tool used and how it selects</h3>
-      <p>Record the method and the exact parameters so the selection is <b>reproducible</b> and an experienced auditor
-        could re-perform it (<AsaRef>ASA 530</AsaRef> para 8 and Appendix 1/4; <AsaRef>ASA 230</AsaRef> para 9):</p>
-      <ul>
-        <li><b>Tool used:</b> this <i>Monetary Unit Sampling — Audit Tool</i> (note the version / date), run in the
-          browser with no data leaving the page.</li>
-        <li><b>Method:</b> fixed-interval (systematic) Monetary Unit Sampling — a probability-proportional-to-size,
-          value-weighted method in which each $1 of book value has an equal chance of selection, so larger items are
-          more likely to be chosen.</li>
-        <li><b>Inputs that define the selection:</b> the <b>amount column</b> sampling was based on; the <b>population
-          book value</b> and item count; the <b>sampling interval</b> (population ÷ n, or the interval you entered); and
-          the <b>random start</b>.</li>
-        <li><b>How the tool selects:</b> book values are accumulated in the population's order; from the random start a
-          "hit" is taken every interval dollars, and the item containing each hit dollar is selected. Any item ≥ the
-          interval is a <b>key item</b> selected with certainty and examined in full.</li>
-        <li><b>Reproducibility:</b> retain the population (in its order), the interval and the random start — these three
-          reproduce the sample exactly. Attach the tool's <b>exported CSV / saved sample</b> of selected items, with their
-          identifying references, as the record of items tested (<AsaRef>ASA 230</AsaRef> para 9(a)).</li>
-        <li><b>Who and when:</b> record who performed the selection and the date (<AsaRef>ASA 230</AsaRef> para 9(b)–(c)).</li>
+      <p><b>Record</b> (<AsaRef>ASA 530</AsaRef> para 8 &amp; Appendix 1/4; <AsaRef>ASA 230</AsaRef> para 9):</p>
+      <ul className="rec">
+        <li>the tool (and version/date) and the method — fixed-interval MUS (probability-proportional-to-size);</li>
+        <li>the inputs that fix the selection: amount column, sample basis (positive/negative), population value and
+          count, interval, and random start;</li>
+        <li>that key items (≥ the interval) are examined in full;</li>
+        <li>that the selection re-performs from population order + interval + random start — attach the exported/saved
+          sample as the record of items tested;</li>
+        <li>who selected it and when.</li>
       </ul>
+      <div className="example">
+        <div className="lbl">Example — supplies &amp; services expenses</div>
+        <p>Selected using the MUS tool (v15-07-26), fixed-interval Monetary Unit Sampling on the <b>Amount</b> column,
+          <b> positive</b> values. Population $48,000,000 across 3,000 items; sampling interval <b>$400,000</b>
+          (= 48,000,000 ÷ 120); random start <b>$137,452</b>.</p>
+        <p>Six transactions ≥ $400,000 were taken as <b>key items</b> (examined in full); 114 sample items were selected.
+          The sample was exported to <i>bjiang_150726_0914_positive.csv</i> and filed at [WP ref]. The population (in
+          order), interval and random start are retained so the selection can be re-performed.</p>
+        <p>Selection performed by [initials], 15 July 2026.</p>
+      </div>
 
       <h3>(c) Documenting the projection (extrapolation) of errors to the population</h3>
-      <p>Record the misstatements found, how they were projected, and your conclusion
-        (<AsaRef>ASA 530</AsaRef> para 12–15; <AsaRef>ASA 450</AsaRef>):</p>
-      <ul>
-        <li>For each item, the <b>book value, audited value and misstatement</b>, and the <b>nature and cause</b> of each
-          misstatement — and whether any is an <b>anomaly</b> (<AsaRef>ASA 530</AsaRef> para 12–13).</li>
-        <li>The <b>projection method</b>: for sample items, tainting × interval; for key items, the actual misstatement
-          (no projection). The resulting <b>most likely (projected) error</b> (<AsaRef>ASA 530</AsaRef> para 14).</li>
-        <li>The <b>upper misstatement limit</b> (this tool uses the Stringer bound) and its components — <b>basic
-          precision</b> and the <b>allowance for sampling risk</b> — and the confidence / reliability factors used.</li>
-        <li>Your <b>evaluation and conclusion</b>: comparison of the upper misstatement limit with tolerable
-          misstatement / materiality, whether the population is or may be materially misstated, and your response if it
-          is exceeded — request management to investigate and correct, perform further or extended procedures, and
-          reassess (<AsaRef>ASA 530</AsaRef> para 15).</li>
-        <li>Carry the misstatements (projected, key-item actuals and any uncorrected items) to your <b>schedule of
-          misstatements</b> for evaluation against materiality (<AsaRef>ASA 450</AsaRef>).</li>
+      <p><b>Record</b> (<AsaRef>ASA 530</AsaRef> para 12–15; <AsaRef>ASA 450</AsaRef>):</p>
+      <ul className="rec">
+        <li>each item's book value, audited value, misstatement and cause; flag any anomaly;</li>
+        <li>the projection — sample items = tainting × interval, key items = actual — giving the most likely error;</li>
+        <li>the upper misstatement limit (Stringer bound), basic precision and confidence used;</li>
+        <li>the conclusion vs materiality and your response; carry misstatements to the misstatements schedule.</li>
       </ul>
+      <div className="example">
+        <div className="lbl">Example — supplies &amp; services expenses</div>
+        <p>Testing of the 120 items found two overstatements (both over-billings corrected to the agreed contract price;
+          neither an anomaly): <b>INV-2041</b> book $120,000 / audited $108,000 (10.0% taint → projected $40,000);
+          <b> INV-2088</b> book $80,000 / audited $78,000 (2.5% taint → projected $10,000). Key items: no misstatements.</p>
+        <p>Most likely error <b>$50,000</b>; basic precision <b>$1,200,000</b>; upper misstatement limit <b>$1,285,500</b>
+          at 95% confidence. Tolerable misstatement = 5% × $48,000,000 = <b>$2,400,000</b>.</p>
+        <p className="concl">Conclusion: the upper misstatement limit ($1,285,500) is below tolerable misstatement
+          ($2,400,000), so supplies and services expenses are not materially misstated for overstatement. The $50,000
+          most likely error was carried to the schedule of misstatements. Reviewed by [initials], 18 July 2026.</p>
+      </div>
 
       <div className="callout ok">
         <div className="ttl">The experienced-auditor test</div>
@@ -1021,23 +1072,27 @@ function App(){
     step:1, ee:"Low", confidence:95, materiality:5,
     sampleSize:SAMPLE_TABLES.Low[95][5],
     rawData:"", hasHeader:true, amountCol:0, refCol:0,
-    interval:"", intervalTouched:false, randomStart:"",
+    interval:"", intervalTouched:false, randomStart:"", sampleBasis:"positive",
     selection:null, audited:{}, materialityDollar:"", loadedName:""
   });
   const set=(patch)=>setSt(s=>({...s,...patch}));
+
+  // performed-by / username (persisted) — used in default file names and working papers
+  const [username,setUsernameState]=useState(()=>{ try{return window.localStorage.getItem('mus_username')||'';}catch(e){return '';} });
+  function setUsername(v){ setUsernameState(v); try{window.localStorage.setItem('mus_username',v);}catch(e){} }
 
   // ---- saved samples (persist to browser localStorage) ----
   const [savedSamples,setSavedSamples]=useState(()=>loadSavedSamples());
   function persist(list){ setSavedSamples(list); return writeSavedSamples(list); }
   function saveCurrentSample(rawName){
     const sel=st.selection; if(!sel) return {ok:false,msg:'Draw a sample first.'};
-    const name=(rawName&&rawName.trim())||('Sample '+new Date().toLocaleString('en-AU'));
-    const rec={ id:makeId(), name, savedAt:new Date().toISOString(),
-      ee:sel.ee, confidence:sel.confidence, materiality:sel.materiality,
+    const name=(rawName&&rawName.trim())||baseName(username,sel.sampleBasis);
+    const rec={ id:makeId(), name, savedAt:new Date().toISOString(), performedBy:username||"",
+      ee:sel.ee, confidence:sel.confidence, materiality:sel.materiality, sampleBasis:sel.sampleBasis||'positive',
       total:sel.total, popCount:sel.popCount, sampleSize:sel.sampleSize,
       interval:sel.interval, randomStart:sel.randomStart,
       materialityDollar:st.materialityDollar, audited:st.audited||{},
-      items:sel.items.map(it=>({ref:it.ref,amount:it.amount,origIndex:it.origIndex,
+      items:sel.items.map(it=>({ref:it.ref,amount:it.amount,signed:it.signed,origIndex:it.origIndex,
         cumStart:it.cumStart,cumEnd:it.cumEnd,isKey:it.isKey,nHits:it.nHits})) };
     const list=[...savedSamples];
     const i=list.findIndex(x=>(x.name||'').toLowerCase()===name.toLowerCase());
@@ -1050,12 +1105,12 @@ function App(){
   function loadSavedSample(rec){
     const selection={ items:rec.items||[], interval:rec.interval, randomStart:rec.randomStart,
       sampleSize:rec.sampleSize, total:rec.total, popCount:rec.popCount,
-      ee:rec.ee, confidence:rec.confidence, materiality:rec.materiality };
+      ee:rec.ee, confidence:rec.confidence, materiality:rec.materiality, sampleBasis:rec.sampleBasis||'positive' };
     set({ selection, audited:rec.audited||{}, materialityDollar:rec.materialityDollar||'',
-      loadedName:rec.name, step:3 });
+      loadedName:rec.name, step:3, sampleBasis:rec.sampleBasis||'positive' });
   }
   function exportSavedSample(rec){
-    downloadJSON('mus-sample-'+String(rec.name||'sample').replace(/[^a-z0-9_-]+/gi,'_')+'.json', rec);
+    downloadJSON(String(rec.name||'sample').replace(/[^a-z0-9_-]+/gi,'_')+'.json', rec);
   }
   function importSavedSample(text){
     try{
@@ -1071,8 +1126,10 @@ function App(){
     }catch(e){ return {ok:false,msg:'That file is not valid JSON.'}; }
   }
 
-  const S={...st,set, savedSamples, saveCurrentSample, deleteSavedSample,
-    loadSavedSample, exportSavedSample, importSavedSample};
+  function defaultSampleName(){ const b=(st.selection&&st.selection.sampleBasis)||st.sampleBasis; return baseName(username,b); }
+
+  const S={...st,set, username, setUsername, defaultSampleName, savedSamples, saveCurrentSample,
+    deleteSavedSample, loadSavedSample, exportSavedSample, importSavedSample};
 
   // keep sample size synced to the table when planning params change
   useEffect(()=>{ set({sampleSize:SAMPLE_TABLES[st.ee][st.confidence][st.materiality], intervalTouched:false});
@@ -1086,10 +1143,19 @@ function App(){
   ];
   return (
     <>
-      <header className="app"><div className="wrap">
-        <h1>Monetary Unit Sampling <span className="tag">AUDIT TOOL</span></h1>
-        <p>Plan the sample size, draw a probability-proportional-to-size sample, and project misstatements
-          to the population.</p>
+      <header className="app"><div className="wrap"
+        style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',gap:16,flexWrap:'wrap'}}>
+        <div>
+          <h1>Monetary Unit Sampling <span className="tag">AUDIT TOOL</span></h1>
+          <p>Plan the sample size, draw a probability-proportional-to-size sample, and project misstatements
+            to the population.</p>
+        </div>
+        <div>
+          <label style={{display:'block',fontSize:11,color:'#b9c4d6',marginBottom:3}}>Performed by (used in file names)</label>
+          <input type="text" value={username} onChange={e=>setUsername(e.target.value)} placeholder="your name / initials"
+            style={{padding:'7px 10px',borderRadius:6,border:'1px solid #ffffff33',background:'#ffffff1a',
+              color:'#fff',fontSize:13,minWidth:210}}/>
+        </div>
       </div></header>
       <div className="wrap">
         <div className="steps">

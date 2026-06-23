@@ -13,10 +13,12 @@ Pick the expected error level (Low / Moderate EE$), confidence level and materia
 sample size is read from the VAGO DST guidance tables, with the relevant cell highlighted.
 
 **Step 2 — Select the sample (probability-proportional-to-size)**
-Paste or upload your population (CSV/Excel), choose the **amount column** sampling is based on, and the
-tool computes the **sampling interval** (population ÷ sample size — or enter your own). A random start is
-generated (and editable, for reproducibility). Fixed-interval MUS selection draws the sample; any item
-whose book value ≥ the interval is flagged as a **key item** examined in full. Export the selection to CSV.
+Paste or upload your population (CSV/Excel), choose the **amount column**, and pick the **sample basis —
+positive or negative values** (e.g. to sample credit notes / refunds; negatives are sampled on their absolute
+amounts). The tool computes the **sampling interval** (population ÷ sample size — or enter your own). A random
+start is generated (and editable, for reproducibility). Fixed-interval MUS selection draws the sample; any item
+whose value ≥ the interval is flagged as a **key item** examined in full. The CSV export records the sample
+basis (and the original signed amounts).
 
 **Step 3 — Evaluate & project errors**
 Enter the audited value beside each book value. For each sample item the tool computes the **tainting** and
@@ -25,17 +27,19 @@ Enter the audited value beside each book value. For each sample item the tool co
 materiality to reach a conclusion. Export the evaluation to CSV.
 
 **Documentation (ASA)**
-A reference page (the **ASA · Documentation** tab) setting out what to record so the work meets the Australian
+A concise reference page (the **ASA · Documentation** tab) on what to record so the work meets the Australian
 Auditing Standards issued by the AUASB — how to evidence (a) the sample-size estimate, (b) the sample selection
-(the tool used and how it selects), and (c) the projection of errors to the population. References ASA 530 (Audit
+(the tool used and how it selects), and (c) the projection of errors to the population — with a **worked example
+throughout for detailed substantive testing of supplies and services expenses**. References ASA 530 (Audit
 Sampling), ASA 230 (Audit Documentation), and ASA 320 / 450 / 330 / 500.
 
 ## Saving & recalling samples
 
-After a sample is selected you can **save** it (name it, then *Save current sample*). Saved samples are kept in
-the browser's local storage and listed under **Saved samples** in Steps 2 and 3, where you can **Load** one back
-in before extrapolating errors, **Delete** it, or **Export** it to a JSON file (and **Import** it on another
-machine) for your working papers.
+Enter your name in the **Performed by** field (top right) — it is remembered and used in default file names.
+After a sample is selected you can **save** it; the default name is `username_ddmmyy_HHMM_positive|negative`.
+Saved samples are kept in the browser's local storage and listed under **Saved samples** in Steps 2 and 3, where
+you can **Load** one back in before extrapolating errors, **Delete** it, or **Export** it to a JSON file (and
+**Import** it on another machine) for your working papers. CSV/JSON exports default to the same name.
 
 ## Methodology notes
 
