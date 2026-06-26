@@ -344,6 +344,40 @@ function sampleRecToCSV(rec){
   return rows;
 }
 
+// parse a CSV produced by sampleRecToCSV back into a saved-sample record
+function csvToSampleRec(text){
+  const rows=parseDelimited(text); if(!rows.length) return null;
+  const meta={}; let h=-1;
+  for(let i=0;i<rows.length;i++){
+    if((rows[i][0]||'')==='Reference'){ h=i; break; }
+    if(rows[i].length>=2) meta[rows[i][0]]=rows[i][1];
+  }
+  if(h<0) return null;
+  const neg=String(meta['Sample basis']||'').toLowerCase().includes('negative');
+  const iAmt=1, iSigned=neg?2:-1, iType=neg?3:2, iAud=neg?4:3;
+  const numv=s=>{ const v=parseFloat(String(s==null?'':s).replace(/[^0-9.\-]/g,'')); return isNaN(v)?0:v; };
+  const items=[]; const audited={};
+  for(let i=h+1;i<rows.length;i++){
+    const r=rows[i]; if(!r||(r[0]||'').toString().trim()==='') continue;
+    const amount=numv(r[iAmt]); if(!amount) continue;
+    const oi=items.length;
+    const signed = neg ? (iSigned>=0?numv(r[iSigned]):-amount) : amount;
+    items.push({ref:(r[0]||'').toString(), amount, signed, origIndex:oi,
+      isKey:/key/i.test(r[iType]||''), nHits:1, cumStart:0, cumEnd:0});
+    const a=r[iAud]; if(a!=null && String(a).trim()!=='') audited[oi]=String(a).trim();
+  }
+  if(!items.length) return null;
+  return {
+    name: meta['Name']||'Imported sample', performedBy: meta['Performed by']||'',
+    sampleBasis: neg?'negative':'positive',
+    ee: (String(meta['Expected error']||'Low').trim().split(/\s+/)[0])||'Low',
+    confidence: numv(meta['Confidence'])||95, materiality: numv(meta['Materiality'])||5,
+    popCount: numv(meta['Population items']), total: numv(meta['Population value (absolute)']),
+    sampleSize: numv(meta['Planned sample size']), interval: numv(meta['Sampling interval']),
+    randomStart: numv(meta['Random start']), materialityDollar:'', items, audited
+  };
+}
+
 /* ============================================================
    MUS selection — TWO-STRATUM
    1) every item >= the sampling interval is a CERTAINTY ("key") item:
@@ -434,7 +468,8 @@ function evaluateSample(selected, auditedMap, interval, confFrac){
 }
 
 // expose for verification
-window.__MUS={reliabilityFactor,gammaP,gammaPInv,runSelection,residualInterval,evaluateSample,parseAmount};
+window.__MUS={reliabilityFactor,gammaP,gammaPInv,runSelection,residualInterval,evaluateSample,parseAmount,
+  sampleRecToCSV,csvToSampleRec,toCSV};
 
 /* ============================================================
    UI components
@@ -1087,6 +1122,13 @@ function SavedSamples({S, compact}){
       setMsg(r.ok?{t:'ok',m:'Imported '+r.count+' sample(s).'}:{t:'err',m:r.msg||'Could not import that file.'}); };
     rd.readAsText(f); e.target.value='';
   }
+  function doImportCSV(e){
+    const f=e.target.files[0]; if(!f) return;
+    const rd=new FileReader();
+    rd.onload=()=>{ const r=S.importSavedSampleCSV(rd.result);
+      setMsg(r.ok?{t:'ok',m:'Imported “'+r.name+'”.'}:{t:'err',m:r.msg||'Could not import that file.'}); };
+    rd.readAsText(f); e.target.value='';
+  }
 
   const list=S.savedSamples;
 
@@ -1108,23 +1150,19 @@ function SavedSamples({S, compact}){
     );
   }
 
-  // Full mode (Evaluate step): save + load/manage + import.
+  // Full mode (Evaluate step): import a saved CSV, then load or delete.
   return (
     <>
       <h3>Saved samples <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· stored in this browser</span></h3>
       <div className="row" style={{marginBottom:8}}>
-        <input type="text" aria-label="Sample name" placeholder={canSave?"Name this sample…":"Load a saved sample, or import one"}
-          value={name} onChange={e=>{setName(e.target.value); setNameEdited(e.target.value.trim()!=='');}}
-          disabled={!canSave} style={{maxWidth:280}}/>
-        <button className="btn teal sm" onClick={doSave} disabled={!canSave}>Save current sample</button>
-        <button className="btn ghost sm" onClick={()=>fileRef.current.click()}>Import (JSON)…</button>
-        <input ref={fileRef} type="file" accept=".json,application/json" style={{display:'none'}} onChange={doImport}/>
+        <button className="btn ghost sm" onClick={()=>fileRef.current.click()}>Import (CSV)…</button>
+        <input ref={fileRef} type="file" accept=".csv,text/csv" style={{display:'none'}} onChange={doImportCSV}/>
+        <span className="hint">Import a previously saved sample CSV to load it for evaluation.</span>
       </div>
-      <div className="hint" style={{margin:'-2px 0 8px'}}>“Save current sample” stores it in this browser and writes a CSV copy (you choose where to save).</div>
       {msg && <div className={msg.t==='ok'?'note':'err'}>{msg.m}</div>}
 
       {list.length===0
-        ? <div className="note">No saved samples yet. Draw a sample on the Select step and click <b>Save current sample</b> — it saves to this browser and writes a CSV copy. You can also <b>Import</b> a previously exported JSON file.</div>
+        ? <div className="note">No saved samples yet. Import a previously saved CSV, or save a sample on the Select step.</div>
         : <div className="scrollx" style={{maxHeight:300}}>
             <table className="data">
               <thead><tr><th>Name</th><th>Saved</th><th className="num">Items</th>
@@ -1137,11 +1175,12 @@ function SavedSamples({S, compact}){
                     <td className="num">{r.items?r.items.length:0}</td>
                     <td className="num">{money(r.interval)}</td>
                     <td>{r.ee} EE · {r.confidence}% · {r.materiality}% · {r.sampleBasis==='negative'?'neg':'pos'}</td>
-                    <td style={{whiteSpace:'nowrap'}}>
-                      <button className="btn primary sm" onClick={()=>S.loadSavedSample(r)}>Load</button>{' '}
-                      <button className="btn ghost sm" onClick={()=>S.exportSavedSample(r)}>Export</button>{' '}
-                      <button className="btn ghost sm"
-                        onClick={()=>{ if(window.confirm('Delete saved sample “'+r.name+'”?')) S.deleteSavedSample(r.id); }}>Delete</button>
+                    <td>
+                      <div style={{display:'flex',gap:6}}>
+                        <button className="btn primary sm" onClick={()=>S.loadSavedSample(r)}>Load</button>
+                        <button className="btn ghost sm"
+                          onClick={()=>{ if(window.confirm('Delete saved sample “'+r.name+'”?')) S.deleteSavedSample(r.id); }}>Delete</button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1279,11 +1318,20 @@ function App(){
       return {ok, count:recs.length, msg: ok?'':'Imported but could not persist to this browser.'};
     }catch(e){ return {ok:false,msg:'That file is not valid JSON.'}; }
   }
+  function importSavedSampleCSV(text){
+    try{
+      const rec=csvToSampleRec(text);
+      if(!rec) return {ok:false,msg:'That CSV is not a saved MUS sample.'};
+      rec.id=makeId(); rec.savedAt=new Date().toISOString();
+      const ok=persist([rec,...savedSamples]);
+      return {ok, name:rec.name, msg: ok?'':'Imported but could not persist to this browser.'};
+    }catch(e){ return {ok:false,msg:'Could not read that CSV file.'}; }
+  }
 
   function defaultSampleName(){ const b=(st.selection&&st.selection.sampleBasis)||st.sampleBasis; return baseName(username,b); }
 
   const S={...st,set, username, setUsername, defaultSampleName, savedSamples, saveCurrentSample,
-    deleteSavedSample, loadSavedSample, exportSavedSample, importSavedSample};
+    deleteSavedSample, loadSavedSample, exportSavedSample, importSavedSample, importSavedSampleCSV};
 
   // keep sample size synced to the table when planning params change
   useEffect(()=>{ set({sampleSize:SAMPLE_TABLES[st.ee][st.confidence][st.materiality], intervalTouched:false});
