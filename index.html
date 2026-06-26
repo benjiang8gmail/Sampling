@@ -302,33 +302,55 @@ function cleanUser(u){ return (String(u||'').trim().replace(/[^a-z0-9_-]+/gi,'')
 function baseName(username,basis){ return cleanUser(username)+'_'+stamp()+'_'+(basis==='negative'?'negative':'positive'); }
 
 /* ============================================================
-   MUS systematic (fixed-interval) selection
-   items: [{ref, amount(>0), origIndex}]   amount in book-value $
+   MUS selection — TWO-STRATUM
+   1) every item >= the sampling interval is a CERTAINTY ("key") item:
+      examined in full and counted ONCE (never selected more than once);
+   2) the remaining sub-interval population is selected by systematic
+      probability-proportional-to-size MUS at the interval.
+   items: [{ref, amount(>0), signed, origIndex}]
    ============================================================ */
 function runSelection(items, interval, randomStart){
-  const selectedMap=new Map();
-  let cumEnd=0, nextHit=randomStart;
-  const order=[];
+  const eps=1e-6;
+  const sel=[];
+  let nextHit=randomStart, rcum=0;
   for(const it of items){
-    const start=cumEnd; cumEnd+=it.amount;
-    const hits=[];
-    while(nextHit<=cumEnd+1e-6){ hits.push(nextHit); nextHit+=interval; }
-    if(hits.length>0){
-      const rec={...it, cumStart:start, cumEnd, hits, nHits:hits.length,
-        isKey: it.amount>=interval-1e-6};
-      selectedMap.set(it.origIndex,rec); order.push(rec);
+    if(it.amount>=interval-eps){
+      sel.push({...it, isKey:true, nHits:1});                  // certainty item, once
+    } else {
+      rcum+=it.amount;                                         // residual cumulative
+      let hit=false;
+      while(nextHit<=rcum+eps){ hit=true; nextHit+=interval; } // item < interval => <=1 hit
+      if(hit) sel.push({...it, isKey:false, nHits:1});
     }
   }
-  // safeguard: every item >= interval is a certainty (key) selection
-  for(const it of items){
-    if(it.amount>=interval-1e-6 && !selectedMap.has(it.origIndex)){
-      let c=0; for(const x of items){ if(x.origIndex===it.origIndex) break; c+=x.amount; }
-      const rec={...it, cumStart:c, cumEnd:c+it.amount, hits:[], nHits:1, isKey:true};
-      selectedMap.set(it.origIndex,rec); order.push(rec);
-    }
+  sel.sort((a,b)=>a.origIndex-b.origIndex);
+  // population running cumulative, for display only
+  const cum={}; let c=0;
+  for(const it of items){ c+=it.amount; cum[it.origIndex]=c; }
+  for(const r of sel) r.cumEnd=cum[r.origIndex];
+  return sel;
+}
+
+/* Derive the residual sampling interval so the two-stratum sample yields ~n
+   DISTINCT items: certainty items (>= interval) are removed and the interval is
+   recomputed over the remainder until the certainty set is stable. Because the
+   recomputed interval is smaller, items below the original P/n interval but above
+   the recomputed one also become certainties. */
+function residualInterval(items, n){
+  const eps=1e-6;
+  const P=items.reduce((s,x)=>s+x.amount,0);
+  if(P<=0||n<1) return 0;
+  let interval=P/n, prevKc=-1;
+  for(let g=0; g<items.length+10; g++){
+    let kt=0,kc=0;
+    for(const it of items){ if(it.amount>=interval-eps){ kt+=it.amount; kc++; } }
+    const rN=n-kc;
+    if(rN<=0) return P/n;                  // more certainty items than n: fall back
+    const ni=(P-kt)/rN;
+    if(kc===prevKc || Math.abs(ni-interval)<eps) return ni;
+    prevKc=kc; interval=ni;
   }
-  order.sort((a,b)=>a.cumStart-b.cumStart);
-  return order;
+  return interval;
 }
 
 /* ============================================================
@@ -369,7 +391,7 @@ function evaluateSample(selected, auditedMap, interval, confFrac){
 }
 
 // expose for verification
-window.__MUS={reliabilityFactor,gammaP,gammaPInv,runSelection,evaluateSample,parseAmount};
+window.__MUS={reliabilityFactor,gammaP,gammaPInv,runSelection,residualInterval,evaluateSample,parseAmount};
 
 /* ============================================================
    UI components
@@ -550,17 +572,22 @@ function StepSelect({S}){
     return {items,total,count:items.length,excludedWrongSign,badParse,wantNeg};
   },[bodyRows,S.amountCol,S.refCol,S.sampleBasis]);
 
-  // keep interval synced to total/sampleSize until user edits it
+  // default interval = the two-stratum residual interval (yields ~n distinct items),
+  // until the user enters their own
+  const suggestedInterval = useMemo(()=> pop.count>0 && S.sampleSize>0 ? residualInterval(pop.items,S.sampleSize) : 0,
+    [pop.items,pop.count,S.sampleSize]);
   useEffect(()=>{
-    if(!S.intervalTouched && pop.total>0 && S.sampleSize>0)
-      S.set({interval:(pop.total/S.sampleSize).toFixed(2)});
+    if(!S.intervalTouched && suggestedInterval>0)
+      S.set({interval:suggestedInterval.toFixed(2)});
   // eslint-disable-next-line
-  },[pop.total,S.sampleSize,S.intervalTouched]);
+  },[suggestedInterval,S.intervalTouched]);
 
   const intervalNum=parseFloat(S.interval);
   const startNum=parseFloat(S.randomStart);
   const intervalOk = intervalNum>0 && isFinite(intervalNum);
   const startOk = startNum>0 && startNum<=intervalNum+1e-6;
+  const keyCountAtInterval = useMemo(()=> intervalOk ? pop.items.filter(it=>it.amount>=intervalNum-1e-6).length : 0,
+    [pop.items,intervalNum,intervalOk]);
 
   // auto-populate a random start when the interval is valid and none is set (or it became invalid)
   useEffect(()=>{
@@ -720,10 +747,12 @@ function StepSelect({S}){
           <input type="number" value={S.interval}
             onChange={e=>S.set({interval:e.target.value,intervalTouched:true})}/>
           <div className="hint" style={{marginTop:5}}>
-            {pop.total>0 ? <>Population ÷ n = <b>{money(pop.total/S.sampleSize)}</b></> : "Load data to suggest an interval."}
-            {S.intervalTouched && pop.total>0 &&
+            {intervalOk
+              ? <><b>{num0(keyCountAtInterval)}</b> item(s) ≥ this interval are examined in full; the rest are MUS-sampled.</>
+              : "Load data to derive the interval."}
+            {S.intervalTouched && suggestedInterval>0 &&
               <a style={{marginLeft:6,cursor:'pointer',color:'var(--teal)'}}
-                onClick={()=>S.set({interval:(pop.total/S.sampleSize).toFixed(2),intervalTouched:false})}>use suggested</a>}
+                onClick={()=>S.set({interval:suggestedInterval.toFixed(2),intervalTouched:false})}>use suggested</a>}
           </div>
         </div>
         <div>
@@ -753,8 +782,9 @@ function StepSelect({S}){
             ({sel.items.filter(i=>i.isKey).length} key, {sel.items.filter(i=>!i.isKey).length} sample)</h3>
           <div className="note">
             {sel.sampleBasis==='negative' && <><b>Negative-value basis:</b> amounts shown are absolute values of the selected negative (e.g. credit) items. </>}
-            Interval <b>{money(sel.interval)}</b> · random start <b>{money(sel.randomStart)}</b> ·
-            every item ≥ the interval is a <b>key item</b> examined in full.</div>
+            <b>{num0(sel.items.filter(i=>i.isKey).length)}</b> item(s) ≥ the interval pre-selected as <b>key items</b> (examined in full);
+            the remaining <b>{num0(sel.items.filter(i=>!i.isKey).length)}</b> selected by MUS. Interval <b>{money(sel.interval)}</b> ·
+            random start <b>{money(sel.randomStart)}</b> · no item is selected more than once.</div>
           <div className="scrollx">
             <table className="data">
               <thead><tr>
@@ -778,22 +808,26 @@ function StepSelect({S}){
       )}
 
       <details className="method"><summary>Selection methodology</summary>
-        <div>This uses <b>fixed-interval (systematic) Monetary Unit Sampling</b>. Items are listed in the order
-        provided and their book values accumulated. Starting at the random start, a hit is taken every
-        <code>interval</code> dollars; the item that owns each hit dollar is selected — so selection is
-        probability-proportional-to-size. Items whose book value ≥ the interval are guaranteed to be hit and are
-        treated as <b>key items</b> (examined 100%). Reproduce a selection exactly by recording the population
-        order, the interval and the random start.</div>
+        <div>This uses <b>two-stratum Monetary Unit Sampling</b>. First, every item whose value ≥ the sampling
+        interval is an <b>individually significant ("key") item</b>, examined in full and counted once. The
+        remaining sub-interval population is then selected by <b>systematic probability-proportional-to-size
+        MUS</b> — accumulating book values and taking a hit every <code>interval</code> dollars from the random
+        start, so larger items are more likely to be chosen. <b>No item is ever selected more than once.</b><br/><br/>
+        The default interval is derived from your sample size so the total is about <code>n</code> distinct items;
+        because removing key items lowers the interval, items below the original Population ÷ n interval but above
+        the recomputed one also become key items. Reproduce a selection exactly by recording the population order,
+        the interval and the random start.</div>
       </details>
 
       <h3>Example documentation — sample selection <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· updates with your selections</span></h3>
       <div className="wp">
         <div className="lbl">Working-paper note — supplies &amp; services expenses</div>
         {noteReady ? <>
-          <p><b>Method:</b> fixed-interval Monetary Unit Sampling (probability-proportional-to-size), performed with the
-            MUS tool on the "{amountColName}" column, <b>{noteNeg?'negative':'positive'} values</b>.</p>
+          <p><b>Method:</b> two-stratum Monetary Unit Sampling (individually significant items examined in full, then
+            probability-proportional-to-size sampling of the remainder), performed with the MUS tool on the
+            "{amountColName}" column, <b>{noteNeg?'negative':'positive'} values</b>.</p>
           <p><b>Population:</b> {num0(noteCount)} invoices for supplies and services, total {money(noteTotal)}{noteNeg?' (absolute value of credit/negative items)':''}.</p>
-          <p><b>Parameters:</b> sample size {noteSize}; sampling interval {money(noteInterval)} (= population ÷ {noteSize}); random start {money(noteStart)}.</p>
+          <p><b>Parameters:</b> sample size {noteSize}; sampling interval {money(noteInterval)}; random start {money(noteStart)}.</p>
           {sel
             ? <p><b>Result:</b> {sel.items.length} invoices selected — {sel.items.filter(i=>i.isKey).length} key items (≥ interval, examined in full) and {sel.items.filter(i=>!i.isKey).length} sample items. Performed by {S.username||'[initials]'} on {new Date().toLocaleDateString('en-AU')}.</p>
             : <p className="muted">Click <b>Draw sample</b> to record the invoices selected.</p>}
