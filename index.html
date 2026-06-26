@@ -379,6 +379,41 @@ function csvToSampleRec(text){
   };
 }
 
+// parse a downloaded evaluation CSV (from "Download evaluation") back into a
+// loadable record. Column detection also tolerates a saved-sample CSV.
+function csvToEvalRec(text){
+  const rows=parseDelimited(text); if(!rows.length) return null;
+  const meta={}; let h=-1;
+  for(let i=0;i<rows.length;i++){
+    if((rows[i][0]||'')==='Reference'){ h=i; break; }
+    if(rows[i].length>=2) meta[rows[i][0]]=rows[i][1];
+  }
+  if(h<0) return null;
+  const header=rows[h].map(c=>String(c).toLowerCase());
+  const find=(t,dflt)=>{ const i=header.findIndex(c=>c.includes(t)); return i>=0?i:dflt; };
+  const iBook=find('book value', find('amount', 1)), iAud=find('audited', 2), iType=find('type', header.length-1);
+  const numv=s=>{ const v=parseFloat(String(s==null?'':s).replace(/[^0-9.\-]/g,'')); return isNaN(v)?0:v; };
+  const neg=String(meta['Sample basis']||'').toLowerCase().includes('negative');
+  const items=[]; const audited={};
+  for(let i=h+1;i<rows.length;i++){
+    const r=rows[i]; if(!r||(r[0]||'').toString().trim()==='') continue;
+    const book=numv(r[iBook]); if(!book) continue;
+    const oi=items.length;
+    items.push({ref:(r[0]||'').toString(), amount:book, signed:neg?-book:book, origIndex:oi,
+      isKey:/key/i.test(r[iType]||''), nHits:1, cumStart:0, cumEnd:0});
+    const a=r[iAud]; if(a!=null && String(a).trim()!=='') audited[oi]=String(a).trim();
+  }
+  if(!items.length) return null;
+  const total=items.reduce((s,x)=>s+x.amount,0);
+  const matDollar=numv(meta['Tolerable misstatement / materiality']);
+  return {
+    items, audited, total, sampleBasis: neg?'negative':'positive',
+    interval: numv(meta['Sampling interval']), confidence: numv(meta['Confidence'])||95,
+    materialityDollar: matDollar? matDollar.toFixed(2):'',
+    materiality: (total>0 && matDollar)? +(matDollar/total*100).toFixed(2) : 5
+  };
+}
+
 /* ============================================================
    MUS selection — TWO-STRATUM
    1) every item >= the sampling interval is a CERTAINTY ("key") item:
@@ -473,7 +508,7 @@ function evaluateSample(selected, auditedMap, interval, confFrac){
 
 // expose for verification
 window.__MUS={reliabilityFactor,gammaP,gammaPInv,runSelection,residualInterval,evaluateSample,parseAmount,
-  sampleRecToCSV,csvToSampleRec,toCSV};
+  sampleRecToCSV,csvToSampleRec,csvToEvalRec,toCSV};
 
 /* ============================================================
    UI components
@@ -923,6 +958,30 @@ function StepSelect({S}){
   );
 }
 
+/* ---------------- Load a downloaded evaluation CSV (Evaluate step) ---------------- */
+function LoadEvaluation({S}){
+  const [msg,setMsg]=useState(null);
+  const fileRef=useRef();
+  function doLoad(e){
+    const f=e.target.files[0]; if(!f) return;
+    const rd=new FileReader();
+    rd.onload=()=>{ const r=S.loadEvaluationCSV(rd.result, f.name);
+      setMsg(r.ok?{t:'ok',m:'Loaded evaluation “'+r.name+'”.'}:{t:'err',m:r.msg||'Could not read that evaluation CSV.'}); };
+    rd.readAsText(f); e.target.value='';
+  }
+  return (
+    <>
+      <h3>Load a saved evaluation <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· from a downloaded CSV</span></h3>
+      <div className="row" style={{marginBottom:8}}>
+        <button className="btn ghost sm" onClick={()=>fileRef.current.click()}>Load evaluation (CSV)…</button>
+        <input ref={fileRef} type="file" accept=".csv,text/csv" style={{display:'none'}} onChange={doLoad}/>
+        <span className="hint">Import a previously downloaded evaluation CSV to review it or continue entering audited values.</span>
+      </div>
+      {msg && <div className={msg.t==='ok'?'note':'err'}>{msg.m}</div>}
+    </>
+  );
+}
+
 /* ---------------- Step 3: Evaluate ---------------- */
 function StepEvaluate({S}){
   const sel=S.selection;
@@ -942,9 +1001,9 @@ function StepEvaluate({S}){
   if(!sel) return (
     <div className="card">
       <h2><span className="step-no">Step 3.</span> Evaluate &amp; project errors</h2>
-      <div className="callout info">Draw a sample in Step 2 first, or load a saved sample below — the selected items
-        will appear here for you to enter audited values.</div>
-      <SavedSamples S={S}/>
+      <div className="callout info">Draw a sample in Step 2 first, or load a previously downloaded evaluation below — the
+        selected items will appear here for you to enter audited values.</div>
+      <LoadEvaluation S={S}/>
     </div>
   );
 
@@ -989,7 +1048,7 @@ function StepEvaluate({S}){
       <h2><span className="step-no">Step 3.</span> Evaluate &amp; project errors</h2>
       <p className="sub">Enter the audited (correct) value beside each book value. Misstatements found in the
         sample are projected to the population.</p>
-      {S.loadedName && <div className="note">Loaded saved sample: <b>{S.loadedName}</b>.</div>}
+      {S.loadedName && <div className="note">Loaded: <b>{S.loadedName}</b>.</div>}
 
       <div className="row" style={{marginBottom:6}}>
         <button className="btn ghost sm" onClick={fillNoError}>Mark all "no error" (audited = book)</button>
@@ -1096,7 +1155,7 @@ function StepEvaluate({S}){
         <p className="ref">Ref: ASA 530 para 12–15; ASA 450 (evaluation of misstatements).</p>
       </div>
 
-      <SavedSamples S={S}/>
+      <LoadEvaluation S={S}/>
     </div>
   );
 }
@@ -1338,11 +1397,24 @@ function App(){
       return {ok, name:rec.name, msg: ok?'':'Imported but could not persist to this browser.'};
     }catch(e){ return {ok:false,msg:'Could not read that CSV file.'}; }
   }
+  function loadEvaluationCSV(text, fname){
+    try{
+      const rec=csvToEvalRec(text);
+      if(!rec) return {ok:false,msg:'That CSV is not a saved MUS evaluation.'};
+      const name=(fname||'evaluation').replace(/\.csv$/i,'');
+      const selection={ items:rec.items, interval:rec.interval, randomStart:0,
+        sampleSize:rec.items.length, total:rec.total, popCount:rec.items.length,
+        ee:'Low', confidence:rec.confidence, materiality:rec.materiality, sampleBasis:rec.sampleBasis };
+      set({ selection, audited:rec.audited||{}, materialityDollar:rec.materialityDollar||'',
+        loadedName:name, step:3, sampleBasis:rec.sampleBasis });
+      return {ok:true, name};
+    }catch(e){ return {ok:false,msg:'Could not read that evaluation CSV.'}; }
+  }
 
   function defaultSampleName(){ const b=(st.selection&&st.selection.sampleBasis)||st.sampleBasis; return baseName(username,b); }
 
   const S={...st,set, username, setUsername, defaultSampleName, savedSamples, saveCurrentSample,
-    deleteSavedSample, loadSavedSample, exportSavedSample, importSavedSample, importSavedSampleCSV};
+    deleteSavedSample, loadSavedSample, exportSavedSample, importSavedSample, importSavedSampleCSV, loadEvaluationCSV};
 
   // keep sample size synced to the table when planning params change
   useEffect(()=>{ set({sampleSize:SAMPLE_TABLES[st.ee][st.confidence][st.materiality], intervalTouched:false});
