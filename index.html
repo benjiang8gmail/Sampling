@@ -676,9 +676,13 @@ function StepSelect({S}){
   },[S.rawData,S.hasHeader]);
 
   const pop = useMemo(()=>{
-    const items=[]; let excludedWrongSign=0, badParse=0;
+    const items=[]; let excludedWrongSign=0, badParse=0, excludedTotals=0;
     const wantNeg = S.sampleBasis==='negative';
+    // a totals/subtotal row: some cell is exactly "Total"/"Totals"/"Grand total"/"Subtotal"/"Sum"
+    // (whole-cell match, so a supplier like "TotalEnergies" is NOT excluded)
+    const TOTAL_RE=/^\s*(grand\s+)?(sub[\s-]?)?totals?\s*:?\s*$|^\s*sum\s*:?\s*$/i;
     bodyRows.forEach((r,i)=>{
+      if(r.some(c=>TOTAL_RE.test(String(c==null?'':c)))){ excludedTotals++; return; }  // ignore totals rows
       const v=parseAmount(r[S.amountCol]);
       if(isNaN(v)){ badParse++; return; }
       if(wantNeg ? v>=0 : v<=0){ excludedWrongSign++; return; }  // keep only the chosen sign
@@ -686,7 +690,7 @@ function StepSelect({S}){
         amount:Math.abs(v), signed:v, origIndex:i});            // MUS runs on the absolute amount
     });
     const total=items.reduce((s,x)=>s+x.amount,0);
-    return {items,total,count:items.length,excludedWrongSign,badParse,wantNeg};
+    return {items,total,count:items.length,excludedWrongSign,badParse,excludedTotals,wantNeg};
   },[bodyRows,S.amountCol,S.refCol,S.sampleBasis]);
 
   // default interval = the two-stratum residual interval (yields ~n distinct items),
@@ -841,10 +845,13 @@ function StepSelect({S}){
           <Stat k="Unparsed rows" v={num0(pop.badParse)}/>
         </div>
       )}
-      {parsed.length>0 && (pop.excludedWrongSign>0||pop.badParse>0) &&
-        <div className="note">{pop.wantNeg
-          ? "Zero, positive or non-numeric items are excluded — only negative items are sampled here, on their absolute amounts."
-          : "Zero, negative or non-numeric items are excluded — MUS draws from positive book values only."} Test any excluded items separately.</div>}
+      {parsed.length>0 && (pop.excludedWrongSign>0||pop.badParse>0||pop.excludedTotals>0) &&
+        <div className="note">
+          {pop.excludedTotals>0 && <><b>{pop.excludedTotals} totals/subtotal row(s) ignored</b> (a cell reads “Total”, “Subtotal” or “Sum”). </>}
+          {(pop.excludedWrongSign>0||pop.badParse>0) && (pop.wantNeg
+            ? "Zero, positive or non-numeric items are excluded — only negative items are sampled here, on their absolute amounts. "
+            : "Zero, negative or non-numeric items are excluded — MUS draws from positive book values only. ")}
+          Test any excluded items separately.</div>}
 
       <h3>2 · Sampling parameters</h3>
       <div className="grid g3">
