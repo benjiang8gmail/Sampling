@@ -408,7 +408,8 @@ function csvToEvalRec(text){
   const matDollar=numv(meta['Tolerable misstatement / materiality']);
   return {
     items, audited, total, sampleBasis: neg?'negative':'positive',
-    interval: numv(meta['Sampling interval']), confidence: numv(meta['Confidence'])||95,
+    interval: numv(meta['Sampling interval']), randomStart: numv(meta['Random start']),
+    confidence: numv(meta['Confidence'])||95,
     materialityDollar: matDollar? matDollar.toFixed(2):'',
     materiality: (total>0 && matDollar)? +(matDollar/total*100).toFixed(2) : 5
   };
@@ -555,8 +556,8 @@ function TableBlock({eeKey,label,accent,selConf,selMat,active}){
   );
 }
 
-function Stat({k,v,big,tone}){
-  return <div className="stat"><div className="k">{k}</div>
+function Stat({k,v,big,tone,title}){
+  return <div className="stat" title={title} style={title?{cursor:'help'}:undefined}><div className="k">{k}</div>
     <div className={"v"+(big?" big":"")} style={tone?{color:tone}:{}}>{v}</div></div>;
 }
 
@@ -676,21 +677,23 @@ function StepSelect({S}){
   },[S.rawData,S.hasHeader]);
 
   const pop = useMemo(()=>{
-    const items=[]; let excludedWrongSign=0, badParse=0, excludedTotals=0;
+    const items=[]; let excludedWrongSign=0, badParse=0, excludedTotals=0; const unparsed=[];
     const wantNeg = S.sampleBasis==='negative';
     // a totals/subtotal row: some cell is exactly "Total"/"Totals"/"Grand total"/"Subtotal"/"Sum"
     // (whole-cell match, so a supplier like "TotalEnergies" is NOT excluded)
     const TOTAL_RE=/^\s*(grand\s+)?(sub[\s-]?)?totals?\s*:?\s*$|^\s*sum\s*:?\s*$/i;
+    const refOf=(r,i)=> S.refCol>=0 ? ((r[S.refCol]??'').toString().trim()||('Row '+(i+1))) : ('Row '+(i+1));
     bodyRows.forEach((r,i)=>{
       if(r.some(c=>TOTAL_RE.test(String(c==null?'':c)))){ excludedTotals++; return; }  // ignore totals rows
       const v=parseAmount(r[S.amountCol]);
-      if(isNaN(v)){ badParse++; return; }
+      if(isNaN(v)){ badParse++;
+        if(unparsed.length<25) unparsed.push({ref:refOf(r,i), raw:String(r[S.amountCol]==null?'':r[S.amountCol]).trim().slice(0,40)});
+        return; }
       if(wantNeg ? v>=0 : v<=0){ excludedWrongSign++; return; }  // keep only the chosen sign
-      items.push({ref: S.refCol>=0 ? (r[S.refCol]??'').toString().trim()||('Row '+(i+1)) : ('Row '+(i+1)),
-        amount:Math.abs(v), signed:v, origIndex:i});            // MUS runs on the absolute amount
+      items.push({ref:refOf(r,i), amount:Math.abs(v), signed:v, origIndex:i}); // MUS runs on the absolute amount
     });
     const total=items.reduce((s,x)=>s+x.amount,0);
-    return {items,total,count:items.length,excludedWrongSign,badParse,excludedTotals,wantNeg};
+    return {items,total,count:items.length,excludedWrongSign,badParse,excludedTotals,unparsed,wantNeg};
   },[bodyRows,S.amountCol,S.refCol,S.sampleBasis]);
 
   // default interval = the two-stratum residual interval (yields ~n distinct items),
@@ -842,7 +845,10 @@ function StepSelect({S}){
           <Stat k={pop.wantNeg?"Negative items":"Population items"} v={num0(pop.count)}/>
           <Stat k={pop.wantNeg?"Population value (abs)":"Population book value"} v={money(pop.total)}/>
           <Stat k={pop.wantNeg?"Excluded (≥ 0)":"Excluded (≤ 0)"} v={num0(pop.excludedWrongSign)}/>
-          <Stat k="Unparsed rows" v={num0(pop.badParse)}/>
+          <Stat k="Unparsed rows" v={num0(pop.badParse)}
+            title={pop.badParse>0
+              ? 'Rows whose amount could not be read as a number:\n'+pop.unparsed.map(u=>'• '+u.ref+': "'+u.raw+'"').join('\n')+(pop.badParse>pop.unparsed.length?'\n…and '+(pop.badParse-pop.unparsed.length)+' more':'')
+              : undefined}/>
         </div>
       )}
       {parsed.length>0 && (pop.excludedWrongSign>0||pop.badParse>0||pop.excludedTotals>0) &&
@@ -908,7 +914,7 @@ function StepSelect({S}){
             {sel.sampleBasis==='negative' && <><b>Negative-value basis:</b> amounts shown are absolute values of the selected negative (e.g. credit) items. </>}
             <b>{num0(sel.items.filter(i=>i.isKey).length)}</b> item(s) ≥ the interval pre-selected as <b>key items</b> (examined in full);
             the remaining <b>{num0(sel.items.filter(i=>!i.isKey).length)}</b> selected by MUS. Interval <b>{money(sel.interval)}</b> ·
-            random start <b>{money(sel.randomStart)}</b> · no item is selected more than once.</div>
+            random start <b>{sel.randomStart>0?money(sel.randomStart):'not recorded'}</b> · no item is selected more than once.</div>
           <div className="scrollx">
             <table className="data">
               <thead><tr>
@@ -951,7 +957,7 @@ function StepSelect({S}){
             probability-proportional-to-size sampling of the remainder), performed with the MUS tool on the
             "{amountColName}" column, <b>{noteNeg?'negative':'positive'} values</b>.</p>
           <p><b>Population:</b> {num0(noteCount)} invoices for supplies and services, total {money(noteTotal)}{noteNeg?' (absolute value of credit/negative items)':''}.</p>
-          <p><b>Parameters:</b> sample size {noteSize}; sampling interval {money(noteInterval)}; random start {money(noteStart)}.</p>
+          <p><b>Parameters:</b> sample size {noteSize}; sampling interval {money(noteInterval)}; random start {noteStart>0?money(noteStart):'not recorded'}.</p>
           {sel
             ? <p><b>Result:</b> {sel.items.length} invoices selected — {sel.items.filter(i=>i.isKey).length} key items (≥ interval, examined in full) and {sel.items.filter(i=>!i.isKey).length} sample items. Performed by {S.username||'[initials]'} on {new Date().toLocaleDateString('en-AU')}.</p>
             : <p className="muted">Click <b>Draw sample</b> to record the invoices selected.</p>}
@@ -1033,6 +1039,7 @@ function StepEvaluate({S}){
       ["Performed by",S.username||""],
       ["Sample basis",neg?"Negative values":"Positive values"],
       ["Confidence",sel.confidence+"%"],["Sampling interval",sel.interval.toFixed(2)],
+      ["Random start",(sel.randomStart||0).toFixed(2)],
       ["Tolerable misstatement / materiality",matDollar.toFixed(2)],
       ["Most likely (net) error",ev.netMLE.toFixed(2)],
       ["Upper misstatement limit (overstatement)",ev.uml.toFixed(2)],
@@ -1409,7 +1416,7 @@ function App(){
       const rec=csvToEvalRec(text);
       if(!rec) return {ok:false,msg:'That CSV is not a saved MUS evaluation.'};
       const name=(fname||'evaluation').replace(/\.csv$/i,'');
-      const selection={ items:rec.items, interval:rec.interval, randomStart:0,
+      const selection={ items:rec.items, interval:rec.interval, randomStart:rec.randomStart||0,
         sampleSize:rec.items.length, total:rec.total, popCount:rec.items.length,
         ee:'Low', confidence:rec.confidence, materiality:rec.materiality, sampleBasis:rec.sampleBasis };
       set({ selection, audited:rec.audited||{}, materialityDollar:rec.materialityDollar||'',
