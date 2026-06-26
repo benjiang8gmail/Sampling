@@ -266,21 +266,37 @@ function parseDelimited(text){
   if(field.length>0||row.length>0){ row.push(field); rows.push(row); }
   return rows.filter(r=>!(r.length===1&&r[0].trim()===''));
 }
-function downloadCSV(filename,rows){
-  const csv=rows.map(r=>r.map(c=>{
+function toCSV(rows){
+  return rows.map(r=>r.map(c=>{
     const s=c==null?'':String(c);
     return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
   }).join(',')).join('\n');
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+}
+function triggerDownload(filename, blob){
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a'); a.href=url; a.download=filename;
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
-function downloadJSON(filename,obj){
-  const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a'); a.href=url; a.download=filename;
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+function downloadCSV(filename,rows){ triggerDownload(filename, new Blob([toCSV(rows)],{type:'text/csv;charset=utf-8;'})); }
+function downloadJSON(filename,obj){ triggerDownload(filename, new Blob([JSON.stringify(obj,null,2)],{type:'application/json'})); }
+function safeFileName(s){ return String(s||'sample').replace(/[^a-z0-9_\- ]+/gi,'_').trim()||'sample'; }
+// Save text to a user-chosen location via the File System Access API where available
+// (served over http/https); otherwise fall back to a normal download. Async.
+async function saveTextFile(filename, text, mime, ext, desc){
+  if(window.showSaveFilePicker){
+    try{
+      const handle=await window.showSaveFilePicker({ suggestedName:filename,
+        types:[{ description:desc||'File', accept:{ [mime]:[ext] } }] });
+      const w=await handle.createWritable();
+      await w.write(text); await w.close();
+      return {ok:true, picked:true};
+    }catch(e){
+      if(e && e.name==='AbortError') return {ok:false, cancelled:true};
+      // otherwise (e.g. blocked on file://) fall through to a normal download
+    }
+  }
+  triggerDownload(filename, new Blob([text],{type:mime+';charset=utf-8;'}));
+  return {ok:true, picked:false};
 }
 
 /* ---- saved-sample persistence (browser localStorage) ---- */
@@ -300,6 +316,33 @@ function stamp(){ const d=new Date();
 function cleanUser(u){ return (String(u||'').trim().replace(/[^a-z0-9_-]+/gi,'')||'auditor').slice(0,40); }
 // default file/sample name: username_ddmmyy_HHMM_positive|negative
 function baseName(username,basis){ return cleanUser(username)+'_'+stamp()+'_'+(basis==='negative'?'negative':'positive'); }
+
+// build CSV rows for a saved sample record (metadata + selected items, incl. any audited values)
+function sampleRecToCSV(rec){
+  const neg = rec.sampleBasis==='negative';
+  const rows=[
+    ["Monetary Unit Sampling — saved sample"],
+    ["Name", rec.name||""],
+    ["Performed by", rec.performedBy||""],
+    ["Saved at", rec.savedAt? new Date(rec.savedAt).toLocaleString('en-AU') : ""],
+    ["Sample basis", neg?"Negative values":"Positive values"],
+    ["Expected error", (rec.ee||"")+" EE$"],["Confidence", (rec.confidence||"")+"%"],
+    ["Materiality", (rec.materiality||"")+"%"],["Population items", rec.popCount!=null?rec.popCount:""],
+    ["Population value (absolute)", (rec.total||0).toFixed(2)],["Planned sample size", rec.sampleSize!=null?rec.sampleSize:""],
+    ["Sampling interval", (rec.interval||0).toFixed(2)],["Random start", (rec.randomStart||0).toFixed(2)],
+    ["Items selected", (rec.items||[]).length],[""],
+    neg ? ["Reference","Amount (absolute)","Original (signed) amount","Type","Audited value"]
+        : ["Reference","Book value","Type","Audited value"]
+  ];
+  (rec.items||[]).forEach(it=>{
+    const a = rec.audited && rec.audited[it.origIndex];
+    const aud = (a!=null && String(a).trim()!=='') ? a : "";
+    rows.push(neg
+      ? [it.ref, it.amount.toFixed(2), (it.signed!=null?it.signed.toFixed(2):''), it.isKey?"Key item":"Sample item", aud]
+      : [it.ref, it.amount.toFixed(2), it.isKey?"Key item":"Sample item", aud]);
+  });
+  return rows;
+}
 
 /* ============================================================
    MUS selection — TWO-STRATUM
@@ -648,7 +691,7 @@ function StepSelect({S}){
     sel.items.forEach(r=> meta.push(
       neg ? [r.ref,r.amount.toFixed(2),(r.signed!=null?r.signed.toFixed(2):''),r.cumEnd.toFixed(2),r.isKey?"Key item (100%)":"Sample item",r.nHits]
           : [r.ref,r.amount.toFixed(2),r.cumEnd.toFixed(2),r.isKey?"Key item (100%)":"Sample item",r.nHits]));
-    downloadCSV(baseName(S.username,sel.sampleBasis)+".csv",meta);
+    saveTextFile(baseName(S.username,sel.sampleBasis)+".csv", toCSV(meta), 'text/csv', '.csv', 'CSV file');
   }
 
   const sel=S.selection;
@@ -844,6 +887,7 @@ function StepSelect({S}){
 /* ---------------- Step 3: Evaluate ---------------- */
 function StepEvaluate({S}){
   const sel=S.selection;
+  const [evalMsg,setEvalMsg]=useState(null);
   const matTouched=useRef(false);
   useEffect(()=>{
     if(sel && !matTouched.current && !S.materialityDollar)
@@ -875,7 +919,7 @@ function StepEvaluate({S}){
   function fillNoError(){
     const m={}; sel.items.forEach(it=>m[it.origIndex]=it.amount.toString()); S.set({audited:m});
   }
-  function exportEval(){
+  async function exportEval(){
     const neg=sel.sampleBasis==='negative';
     const rows=[
       ["Monetary Unit Sampling — evaluation"],
@@ -893,7 +937,10 @@ function StepEvaluate({S}){
       r.hasAud?r.audited.toFixed(2):"", r.hasAud?r.misst.toFixed(2):"",
       r.hasAud?(r.taint*100).toFixed(2)+"%":"", r.projected.toFixed(2),
       r.isKey?"Key item":"Sample item"]));
-    downloadCSV(baseName(S.username,sel.sampleBasis)+"-evaluation.csv",rows);
+    const res=await saveTextFile(baseName(S.username,sel.sampleBasis)+"-evaluation.csv", toCSV(rows), 'text/csv', '.csv', 'CSV file');
+    setEvalMsg(res.cancelled ? 'Download cancelled.'
+      : res.picked ? 'Evaluation CSV saved to the location you chose.'
+      : 'Evaluation CSV downloaded to your computer.');
   }
 
   return (
@@ -971,6 +1018,7 @@ function StepEvaluate({S}){
 
       <div className="row">
         <button className="btn ghost" onClick={exportEval}>Download evaluation (CSV)</button>
+        {evalMsg && <span className="hint">{evalMsg}</span>}
       </div>
 
       <details className="method"><summary>Projection methodology (Stringer bound)</summary>
@@ -1021,15 +1069,16 @@ function SavedSamples({S, compact}){
   // eslint-disable-next-line
   },[S.selection]);
 
-  function doSave(){
+  async function doSave(){
     const r=S.saveCurrentSample(name.trim());
-    const downloaded = !!r.rec;
-    if(downloaded) S.exportSavedSample(r.rec);   // also save a copy to disk (your Downloads folder on the C: drive)
-    if(!r.ok){
-      setMsg({t:'err',m:(r.msg||'Could not save to this browser.')+(downloaded?' A file copy was downloaded to your computer.':'')});
-      return;
-    }
-    setMsg({t:'ok',m:(r.replaced?'Updated “':'Saved “')+r.name+'” — to this browser and downloaded a copy to your computer.'});
+    if(!r.rec){ setMsg({t:'err',m:r.msg||'Could not save to this browser.'}); return; }
+    // write a CSV copy to a location the user chooses (falls back to a download)
+    const res=await saveTextFile(safeFileName(r.name)+'.csv', toCSV(sampleRecToCSV(r.rec)), 'text/csv', '.csv', 'CSV file');
+    const browserPart = r.ok ? ((r.replaced?'Updated “':'Saved “')+r.name+'” to this browser') : (r.msg||'Browser save failed');
+    const filePart = res.cancelled ? '; CSV not saved (cancelled).'
+      : res.picked ? ' and saved a CSV to the location you chose.'
+      : ' and downloaded a CSV copy to your computer.';
+    setMsg({t: r.ok?'ok':'err', m: browserPart + filePart});
   }
   function doImport(e){
     const f=e.target.files[0]; if(!f) return;
@@ -1052,7 +1101,7 @@ function SavedSamples({S, compact}){
             value={name} onChange={e=>{setName(e.target.value); setNameEdited(e.target.value.trim()!=='');}}
             disabled={!canSave} style={{flex:'1 1 260px',maxWidth:340}}/>
           <button className="btn teal sm" onClick={doSave} disabled={!canSave}>Save current sample</button>
-          <span className="hint">Saves to this browser <b>and</b> downloads a copy to your computer.{list.length>0 ? ' '+list.length+' saved — load on the Evaluate step.' : ''}</span>
+          <span className="hint">Saves to this browser <b>and</b> writes a CSV copy (you choose where).{list.length>0 ? ' '+list.length+' saved — load on the Evaluate step.' : ''}</span>
         </div>
         {msg && <div className={msg.t==='ok'?'note':'err'} style={{marginTop:8}}>{msg.m}</div>}
       </>
@@ -1071,11 +1120,11 @@ function SavedSamples({S, compact}){
         <button className="btn ghost sm" onClick={()=>fileRef.current.click()}>Import (JSON)…</button>
         <input ref={fileRef} type="file" accept=".json,application/json" style={{display:'none'}} onChange={doImport}/>
       </div>
-      <div className="hint" style={{margin:'-2px 0 8px'}}>“Save current sample” stores it in this browser and downloads a copy to your computer.</div>
+      <div className="hint" style={{margin:'-2px 0 8px'}}>“Save current sample” stores it in this browser and writes a CSV copy (you choose where to save).</div>
       {msg && <div className={msg.t==='ok'?'note':'err'}>{msg.m}</div>}
 
       {list.length===0
-        ? <div className="note">No saved samples yet. Draw a sample on the Select step and click <b>Save current sample</b> — it saves to this browser and downloads a copy to your computer. You can also <b>Import</b> a previously downloaded file.</div>
+        ? <div className="note">No saved samples yet. Draw a sample on the Select step and click <b>Save current sample</b> — it saves to this browser and writes a CSV copy. You can also <b>Import</b> a previously exported JSON file.</div>
         : <div className="scrollx" style={{maxHeight:300}}>
             <table className="data">
               <thead><tr><th>Name</th><th>Saved</th><th className="num">Items</th>
