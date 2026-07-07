@@ -1595,10 +1595,10 @@ function StepEvaluate({S}){
             title="Best estimate of understatement, projected the same way. Indicative only — MUS rarely selects understated items, so it has low power against understatement."/>
           <Stat k="Lower misstatement limit" big v={money(ev.lowerLimit)} tone={exceedsUnder?'var(--warn)':'var(--ok)'}
             title="The understatement equivalent of the upper limit — the same Stringer maths applied to understatement taints. A LOW figure is not assurance over completeness; a figure ABOVE materiality is a genuine red flag. Support with a separate completeness test."/>
-          <Stat k="Minimum error cushion" v={money(ev.basicPrecision)}
-            title="The buffer both limits carry even when zero errors are found — a clean sample can never prove the population is error-free. RF(0) × interval. (Technically: basic precision.)"/>
           <Stat k="Net most likely error" v={money(ev.netMLE)} tone="var(--navy)"
             title="Overstatements net of understatements — the single best estimate of total error, carried to your schedule of uncorrected misstatements."/>
+          <Stat k="Minimum error cushion" v={money(ev.basicPrecision)}
+            title="The buffer both limits carry even when zero errors are found — a clean sample can never prove the population is error-free. RF(0) × interval. (Technically: basic precision.)"/>
         </div>
       </div>
 
@@ -1610,7 +1610,7 @@ function StepEvaluate({S}){
           <div><b>Overstatement:</b> upper limit <b>{money(ev.uml)}</b> is {exceedsOver?"above":"below"} tolerable
             misstatement <b>{money(matDollar)}</b>{matDollar>0?<> ({pct(ev.uml/matDollar)})</>:null}.</div>
           <div style={{marginTop:4}}><b>Understatement:</b> lower limit <b>{money(ev.lowerLimit)}</b> is {exceedsUnder?"above":"below"} tolerable
-            misstatement{matDollar>0?<> ({pct(ev.lowerLimit/matDollar)})</>:null}.</div>
+            misstatement <b>{money(matDollar)}</b>{matDollar>0?<> ({pct(ev.lowerLimit/matDollar)})</>:null}.</div>
           <div style={{marginTop:6}}>{
             exceedsOver&&exceedsUnder ? "Both limits exceed materiality — the population may be materially misstated. Propose adjustments, extend the sample, or investigate."
             : exceedsOver ? "The overstatement limit exceeds materiality — the population may be materially overstated. Propose adjustments, extend the sample, or investigate."
