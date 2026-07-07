@@ -27,11 +27,15 @@ Enter the audited value beside each book value (or bulk-paste a column from Exce
 **anomaly** (excluded from projection with a mandatory justification per ASA 530.13, shown both ways). The
 **conclusion is withheld until every item is resolved**; meanwhile a best/worst-case UML range is shown. For
 each sample item the tool computes the **tainting** (capped at ±100% for the Stringer maths, with any excess
-disclosed); **key items use their actual misstatement uncapped**. It reports the **most likely error**,
-**basic precision** and the **upper misstatement limit** (Stringer bound) and compares the UML with tolerable
-misstatement. Understatements get a plain-English caution (MUS cannot reliably measure them — plan a separate
-completeness test). The evaluation CSV includes the ranked-taint **workings** so a reviewer can re-add the
-bound by hand.
+disclosed); **key items use their actual misstatement uncapped**. It evaluates **both directions**: the
+**most likely overstatement** and **upper misstatement limit (UML)**, and — evaluated separately — the
+**most likely understatement** and **lower misstatement limit (LML)**, plus the **minimum error cushion**
+(basic precision — the buffer both limits carry with zero errors found) and the **net most likely error**
+(carried to the schedule of misstatements). Both limits are compared with tolerable misstatement. Because MUS
+has **low power against understatement**, the LML carries a plain-English caution — a low LML is not assurance
+over completeness (plan a separate completeness test), though an LML above materiality is a genuine red flag.
+The evaluation CSV includes the ranked-taint **workings for both limits** so a reviewer can re-add either bound
+by hand.
 
 **Documentation (ASA)**
 A concise reference page (the **ASA · Documentation** tab) on what to record so the work meets the Australian
@@ -67,7 +71,10 @@ current session and a **how-to-reperform** guide (Part C).
   standard published audit tables (e.g. at 95%: 3.00, 4.75, 6.30, 7.76 …).
 - **Projection (Stringer bound):**
   `UML = interval × [ R(0) + Σ taintᵢ × (R(i) − R(i−1)) ] + key-item misstatements`,
-  with taints ranked largest first. Overstatements and understatements are evaluated separately.
+  with taints ranked largest first. Overstatements and understatements are evaluated **separately**, each
+  producing a most likely error and a limit (the **lower misstatement limit** is the same formula applied to
+  understatement taints). `R(0) × interval` is the **minimum error cushion** (basic precision) — the floor both
+  limits share when no errors are found.
 
 Outputs are a calculation aid — apply professional judgement and your firm/office methodology.
 

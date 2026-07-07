@@ -252,7 +252,7 @@ const {useState,useEffect,useMemo,useRef} = React;
 
 // Tool version — stamped on every export and working paper so a reperformer
 // knows which selection/evaluation rules produced a result.
-const TOOL_VERSION = "2.2 (07/07/2026)";
+const TOOL_VERSION = "2.3 (07/07/2026)";
 const SESSION_KEY  = "mus_session_v1";
 
 /* ============================================================
@@ -540,7 +540,7 @@ function csvToEvalRec(text){
   const items=[]; const audited={}; const unable={}; const anomaly={};
   for(let i=h+1;i<rows.length;i++){
     const r=rows[i]; if(!r||(r[0]||'').toString().trim()==='') continue;
-    if(/^(basic precision|workings|rank|rf\b)/i.test(String(r[0]))) continue;  // skip workings section
+    if(/^workings/i.test(String(r[0]))) break;   // items always precede the workings section — stop here
     const book=numv(r[iBook]); if(!book) continue;
     const oi=items.length;
     items.push({ref:(r[0]||'').toString(), amount:book, signed:neg?-book:book, origIndex:oi,
@@ -682,7 +682,9 @@ function evaluateSample(selected, auditedMap, interval, confFrac, opts){
   const overSchedule=overList.map((x,i)=>{ const inc=rf(i+1)-rf(i); umlSum+=x.taint*inc;
     return {rank:i+1, ref:x.ref, taint:x.taint, rfFrom:rf(i), rfTo:rf(i+1), inc, contribution:x.taint*inc*interval}; });
   const uml=umlSum*interval+keyOver;
-  let llSum=RF0;  for(let i=0;i<underTaints.length;i++) llSum +=underTaints[i]*(rf(i+1)-rf(i));
+  let llSum=RF0;
+  const underSchedule=underList.map((x,i)=>{ const inc=rf(i+1)-rf(i); llSum+=x.taint*inc;
+    return {rank:i+1, ref:x.ref, taint:x.taint, rfFrom:rf(i), rfTo:rf(i+1), inc, contribution:x.taint*inc*interval}; });
   const lowerLimit=llSum*interval+keyUnder;
   // "anomalies as representative" alternative UML (shown so the judgement is visible)
   let umlIncl=uml;
@@ -698,7 +700,7 @@ function evaluateSample(selected, auditedMap, interval, confFrac, opts){
   const anomalyMLE=anomalies.reduce((s,a)=>s+a.misst,0);
   return {rows, basicPrecision, mleOver, mleUnder, netMLE:mleOver-mleUnder,
     uml, umlIncl, lowerLimit, allowance:uml-mleOver, RF0, nCapped, excessOver, excessUnder,
-    keyOver, keyUnder, anomalies, anomalyMLE, overSchedule,
+    keyOver, keyUnder, anomalies, anomalyMLE, overSchedule, underSchedule,
     rfList:Array.from({length:overTaints.length+1},(_,k)=>rf(k)),
     nOver:overTaints.length, nUnder:underTaints.length,
     nKey:selected.filter(s=>s.isKey).length,
@@ -1355,7 +1357,9 @@ function StepEvaluate({S}){
   );
 
   const matDollar=parseFloat(String(S.materialityDollar).replace(/,/g,''))||0;
-  const exceeds=ev.uml>matDollar;                       // conclusion = overstatement test
+  const exceedsOver =ev.uml>matDollar;                  // overstatement conclusion (primary MUS test)
+  const exceedsUnder=ev.lowerLimit>matDollar;           // understatement conclusion (low power — see caveat)
+  const exceeds=exceedsOver||exceedsUnder;
   const errItems=ev.rows.filter(r=>(r.status==='tested'||r.status==='unable') && Math.abs(r.misst)>1e-6);
   const basisNeg=sel.sampleBasis==='negative';
   const toGo=ev.counts.untested+ev.counts.pending;
@@ -1424,14 +1428,17 @@ function StepEvaluate({S}){
       ["Tolerable misstatement / materiality",matDollar.toFixed(2)],
       ["Items — tested / unable / awaiting confirmation / untested",
         ev.counts.tested+" / "+ev.counts.unable+" / "+ev.counts.pending+" / "+ev.counts.untested],
-      ["Most likely (net) error",ev.netMLE.toFixed(2)],
+      ["Most likely overstatement",ev.mleOver.toFixed(2)],
       ["Upper misstatement limit (overstatement)",ev.uml.toFixed(2)],
       ...(ev.anomalies.length? [["UML if anomalies treated as representative",ev.umlIncl.toFixed(2)]]:[]),
-      ["Basic precision",ev.basicPrecision.toFixed(2)],
-      ["Understatement — most likely (indicative only)",ev.mleUnder.toFixed(2)],
-      ["Understatement — indicative lower limit (not reliable; MUS targets overstatement)",ev.lowerLimit.toFixed(2)],
+      ["Most likely understatement (indicative — MUS has low power against understatement)",ev.mleUnder.toFixed(2)],
+      ["Lower misstatement limit (understatement; indicative only)",ev.lowerLimit.toFixed(2)],
+      ["Net most likely error (carried to schedule of misstatements)",ev.netMLE.toFixed(2)],
+      ["Minimum error cushion (basic precision)",ev.basicPrecision.toFixed(2)],
       ["Conclusion", !ev.ready ? ("INCOMPLETE — "+toGo+" item(s) unresolved; conclusion withheld")
-        : (exceeds?"UML exceeds tolerable misstatement":"UML within tolerable misstatement")],[""],
+        : ((exceedsOver||exceedsUnder)
+            ? ((exceedsOver?"overstatement UML":"")+(exceedsOver&&exceedsUnder?" and ":"")+(exceedsUnder?"understatement LML":"")+" exceed(s) tolerable misstatement")
+            : "both upper and lower limits within tolerable misstatement")],[""],
       ["Reference","Book value","Audited value","Status","Misstatement","Raw taint %","Taint used %","Projected","Type","Anomaly justification"]
     ];
     ev.rows.forEach(r=>rows.push([r.ref, r.book.toFixed(2),
@@ -1446,11 +1453,20 @@ function StepEvaluate({S}){
     rows.push(["Workings — Stringer bound (overstatement), so a reviewer can re-add the result"]);
     rows.push(["Reliability factors RF(0..n) at "+sel.confidence+"%", ev.rfList.map(x=>x.toFixed(2)).join(" | ")]);
     rows.push(["Component","Reference","Taint %","RF from","RF to","RF increment","$ contribution"]);
-    rows.push(["Basic precision = RF(0) × interval","","","",ev.RF0.toFixed(2),"",ev.basicPrecision.toFixed(2)]);
+    rows.push(["Minimum error cushion (basic precision) = RF(0) × interval","","","",ev.RF0.toFixed(2),"",ev.basicPrecision.toFixed(2)]);
     ev.overSchedule.forEach(s=>rows.push(["Ranked error "+s.rank, s.ref, (s.taint*100).toFixed(2)+"%",
       s.rfFrom.toFixed(2), s.rfTo.toFixed(2), s.inc.toFixed(2), s.contribution.toFixed(2)]));
     rows.push(["Key-item overstatements (actual, uncapped)","","","","","",ev.keyOver.toFixed(2)]);
     rows.push(["Total — upper misstatement limit","","","","","",ev.uml.toFixed(2)]);
+    if(ev.underSchedule.length>0 || ev.keyUnder>0){
+      rows.push([""]);
+      rows.push(["Workings — Stringer bound (understatement / lower limit); indicative only, MUS has low power against understatement"]);
+      rows.push(["Minimum error cushion (basic precision) = RF(0) × interval","","","",ev.RF0.toFixed(2),"",ev.basicPrecision.toFixed(2)]);
+      ev.underSchedule.forEach(s=>rows.push(["Ranked understatement "+s.rank, s.ref, (s.taint*100).toFixed(2)+"%",
+        s.rfFrom.toFixed(2), s.rfTo.toFixed(2), s.inc.toFixed(2), s.contribution.toFixed(2)]));
+      rows.push(["Key-item understatements (actual, uncapped)","","","","","",ev.keyUnder.toFixed(2)]);
+      rows.push(["Total — lower misstatement limit","","","","","",ev.lowerLimit.toFixed(2)]);
+    }
     const res=await saveTextFile(baseName(S.username,sel.sampleBasis)+"-evaluation.csv", toCSV(rows), 'text/csv', '.csv', 'CSV file');
     setEvalMsg(res.cancelled ? 'Download cancelled.'
       : res.picked ? 'Evaluation CSV saved to the location you chose.'
@@ -1490,8 +1506,9 @@ function StepEvaluate({S}){
       ) : (
         <div className={"banner "+(exceeds?'warn':'ok')}>
           <span className="b-t">{exceeds?'⚠ May exceed materiality':'✓ Within materiality'}</span>
-          <span>Upper misstatement limit <b>{money(ev.uml)}</b> vs tolerable misstatement <b>{money(matDollar)}</b>
-            {matDollar>0?<> ({pct(ev.uml/matDollar)})</>:null} · most likely error {money(ev.netMLE)}.</span>
+          <span>Upper (overstatement) limit <b>{money(ev.uml)}</b>{exceedsOver?' — over':''} · lower (understatement) limit
+            {' '}<b>{money(ev.lowerLimit)}</b>{exceedsUnder?' — over':''} · vs tolerable misstatement <b>{money(matDollar)}</b>
+            {' '}· net most likely error {money(ev.netMLE)}.</span>
         </div>
       )}
 
@@ -1570,12 +1587,18 @@ function StepEvaluate({S}){
             = {money(sel.total*sel.materiality/100)}.</div>
         </div>
         <div className="statgrid" style={{gridTemplateColumns:'1fr 1fr'}}>
-          <Stat k="Most likely error (net)" v={money(ev.netMLE)} tone="var(--navy)"
-            title="Best estimate of total error: projected sample errors plus actual key-item errors (overstatements net of understatements)"/>
-          <Stat k="Upper misstatement limit" big v={money(ev.uml)} tone={exceeds?'var(--warn)':'var(--ok)'}
-            title="Most likely error plus a statistical safety buffer — we are confident the true overstatement is no worse than this. Compare with tolerable misstatement"/>
-          <Stat k="Basic precision" v={money(ev.basicPrecision)}
-            title="The buffer carried even with zero errors found — a clean sample never proves the population is error-free. RF(0) × interval"/>
+          <Stat k="Most likely overstatement" v={money(ev.mleOver)} tone="var(--navy)"
+            title="Best estimate of overstatement in the population: projected sample overstatements plus actual key-item overstatements. A point estimate, not the worst case."/>
+          <Stat k="Upper misstatement limit" big v={money(ev.uml)} tone={exceedsOver?'var(--warn)':'var(--ok)'}
+            title={"Most likely overstatement plus a buffer for sampling risk (Stringer bound). We are "+sel.confidence+"% confident the true overstatement is no more than this. This is the primary MUS conclusion — compare with tolerable misstatement."}/>
+          <Stat k="Most likely understatement" v={money(ev.mleUnder)} tone="var(--navy)"
+            title="Best estimate of understatement, projected the same way. Indicative only — MUS rarely selects understated items, so it has low power against understatement."/>
+          <Stat k="Lower misstatement limit" big v={money(ev.lowerLimit)} tone={exceedsUnder?'var(--warn)':'var(--ok)'}
+            title="The understatement equivalent of the upper limit — the same Stringer maths applied to understatement taints. A LOW figure is not assurance over completeness; a figure ABOVE materiality is a genuine red flag. Support with a separate completeness test."/>
+          <Stat k="Minimum error cushion" v={money(ev.basicPrecision)}
+            title="The buffer both limits carry even when zero errors are found — a clean sample can never prove the population is error-free. RF(0) × interval. (Technically: basic precision.)"/>
+          <Stat k="Net most likely error" v={money(ev.netMLE)} tone="var(--navy)"
+            title="Overstatements net of understatements — the single best estimate of total error, carried to your schedule of uncorrected misstatements."/>
         </div>
       </div>
 
@@ -1584,11 +1607,15 @@ function StepEvaluate({S}){
           <div className="ttl">{exceeds
             ? "⚠ Projected misstatement may exceed materiality"
             : "✓ Within materiality"}</div>
-          <div>Overstatement upper limit <b>{money(ev.uml)}</b> is {exceeds?"above":"below"} tolerable
-            misstatement <b>{money(matDollar)}</b>{matDollar>0?<> ({pct(ev.uml/matDollar)} of materiality)</>:null}.</div>
-          <div style={{marginTop:6}}>{exceeds
-            ? "The population may be materially misstated — propose adjustments, extend the sample, or investigate further."
-            : "Based on this sample there is no evidence the population is materially misstated at the chosen confidence level."}</div>
+          <div><b>Overstatement:</b> upper limit <b>{money(ev.uml)}</b> is {exceedsOver?"above":"below"} tolerable
+            misstatement <b>{money(matDollar)}</b>{matDollar>0?<> ({pct(ev.uml/matDollar)})</>:null}.</div>
+          <div style={{marginTop:4}}><b>Understatement:</b> lower limit <b>{money(ev.lowerLimit)}</b> is {exceedsUnder?"above":"below"} tolerable
+            misstatement{matDollar>0?<> ({pct(ev.lowerLimit/matDollar)})</>:null}.</div>
+          <div style={{marginTop:6}}>{
+            exceedsOver&&exceedsUnder ? "Both limits exceed materiality — the population may be materially misstated. Propose adjustments, extend the sample, or investigate."
+            : exceedsOver ? "The overstatement limit exceeds materiality — the population may be materially overstated. Propose adjustments, extend the sample, or investigate."
+            : exceedsUnder ? "The understatement limit exceeds materiality — the population may be materially understated. Investigate: this is a real flag even though MUS is weak at detecting understatement (see below)."
+            : "No evidence of material overstatement at the chosen confidence level. The understatement limit is also within materiality — but read the note below before relying on it."}</div>
           {ev.counts.unable>0 && <div style={{marginTop:6,fontSize:12.5}}>{ev.counts.unable} item(s) could not be
             tested and are treated as fully misstated (ASA 530.11).</div>}
           {ev.excessOver>0 && <div style={{marginTop:6,fontSize:12.5,fontWeight:600}}>Note: sampled item(s) were misstated
@@ -1608,12 +1635,15 @@ function StepEvaluate({S}){
           as <i>misstated</i>, not clean (ASA 530.11) — enter audited values, or mark it <b>U</b>.</div>
       )}
 
-      {ev.mleUnder>1e-6 && (
+      {ev.ready && (
         <div className="callout" style={{background:'var(--warn-o-bg)',borderColor:'var(--warn-o-stroke)'}}>
-          <div className="ttl" style={{color:'var(--warn-o)'}}>Understatements found — treat as a signal only</div>
-          <div>Most likely understatement <b>{money(ev.mleUnder)}</b>. MUS is built to catch <b>over</b>statement and
-            cannot reliably measure understatement — plan a separate completeness test (e.g. search for unrecorded
-            liabilities). Details are in the CSV export.</div>
+          <div className="ttl" style={{color:'var(--warn-o)'}}>Reading the lower (understatement) limit</div>
+          <div>MUS rarely selects understated items — an item recorded far too low is unlikely to be picked — so it has
+            <b> low power against understatement</b>. {ev.mleUnder>1e-6
+              ? <>The most likely understatement is <b>{money(ev.mleUnder)}</b>; treat the lower limit <b>{money(ev.lowerLimit)}</b> as indicative.</>
+              : <>No understatements were found in this sample, but that is <i>not</i> assurance of completeness — the lower limit of <b>{money(ev.lowerLimit)}</b> is only the minimum cushion.</>}
+            {' '}For real assurance over completeness, plan a separate directed test (e.g. a search for unrecorded liabilities
+            or a subsequent-payments review). A lower limit <i>above</i> materiality, however, is a genuine red flag. Details are in the CSV export.</div>
         </div>
       )}
 
@@ -1682,12 +1712,16 @@ function StepEvaluate({S}){
         <p><b>Misstatements found:</b> {errItems.length===0
           ? 'none — audited values agreed to recorded values.'
           : errItems.length+' ('+errItems.slice(0,6).map(e=>e.ref).join(', ')+(errItems.length>6?', …':'')+').'}</p>
-        <p><b>Projection:</b> most likely error {money(ev.netMLE)}; basic precision {money(ev.basicPrecision)}; upper misstatement limit <b>{money(ev.uml)}</b> at {sel.confidence}% confidence.</p>
+        <p><b>Projection:</b> overstatement — most likely {money(ev.mleOver)}, upper limit <b>{money(ev.uml)}</b>;
+          understatement — most likely {money(ev.mleUnder)}, lower limit {money(ev.lowerLimit)};
+          minimum error cushion (basic precision) {money(ev.basicPrecision)}; net most likely error {money(ev.netMLE)}; at {sel.confidence}% confidence.</p>
         <p><b>Conclusion:</b> {!ev.ready
           ? '[conclusion withheld — '+toGo+' selected item(s) not yet resolved]'
-          : exceeds
-          ? 'the upper misstatement limit exceeds tolerable misstatement ('+money(matDollar)+'), so the population may be materially misstated — request management to investigate and correct, and consider extending the sample.'
-          : 'the upper misstatement limit ('+money(ev.uml)+') is below tolerable misstatement ('+money(matDollar)+'), so there is no evidence the population is materially misstated for '+(basisNeg?'misstatement':'overstatement')+'.'}</p>
+          : exceedsOver
+          ? 'the upper misstatement limit ('+money(ev.uml)+') exceeds tolerable misstatement ('+money(matDollar)+'), so the population may be materially overstated — request management to investigate and correct, and consider extending the sample.'
+          : 'the upper misstatement limit ('+money(ev.uml)+') is below tolerable misstatement ('+money(matDollar)+'), so there is no evidence the population is materially overstated.'}
+          {ev.ready && exceedsUnder && ' The lower misstatement limit ('+money(ev.lowerLimit)+') exceeds tolerable misstatement — the population may be materially understated; investigate and perform a directed completeness test.'}
+          {ev.ready && !exceedsUnder && ' MUS has low power against understatement; a separate completeness test is planned.'}</p>
         {ev.counts.unable>0 && <p>{ev.counts.unable} item(s) could not be tested and were treated as fully misstated (ASA 530.11).</p>}
         {ev.anomalies.length>0 && <p>{ev.anomalies.length} misstatement(s) treated as anomalies under ASA 530.13 (justification retained); their actual errors remain in the schedule of misstatements.</p>}
         <p>{Math.abs(ev.netMLE)>1e-6? 'The most likely error of '+money(ev.netMLE)+' was carried to the schedule of misstatements. ' : ''}Performed by {S.username||'[initials]'} on {new Date().toLocaleDateString('en-AU')}.</p>
@@ -1860,6 +1894,7 @@ function StepDocs({S}){
     {unable:S.unable||{}, anomaly:S.anomaly||{}, confirmedOver:S.confirmedOver||{}}) : null;
   const matDollar = parseFloat(String(S.materialityDollar).replace(/,/g,''))||(sel? sel.total*sel.materiality/100:0);
   const exceeds = ev? ev.uml>matDollar : false;
+  const exceedsUnder = ev? ev.lowerLimit>matDollar : false;
   const fp = (sel&&sel.fingerprint)||S.fingerprint;
   const today=new Date().toLocaleDateString('en-AU');
   return (
@@ -1912,8 +1947,9 @@ function StepDocs({S}){
       <p><b>Record</b> (<AsaRef>ASA 530</AsaRef> para 12–15; <AsaRef>ASA 450</AsaRef>):</p>
       <ul className="rec">
         <li>each item's book value, audited value, misstatement and cause; flag any anomaly;</li>
-        <li>the projection — sample items = tainting × interval, key items = actual — giving the most likely error;</li>
-        <li>the upper misstatement limit (Stringer bound), basic precision and confidence used;</li>
+        <li>the projection — sample items = tainting × interval, key items = actual — giving the most likely error each way;</li>
+        <li>the upper (overstatement) and lower (understatement) misstatement limits (Stringer bound), the minimum error
+          cushion (basic precision) and confidence used — note MUS has low power against understatement;</li>
         <li>the conclusion vs materiality and your response; carry misstatements to the misstatements schedule.</li>
       </ul>
 
@@ -1952,11 +1988,12 @@ function StepDocs({S}){
             ({ev.counts.unable} unable to test — treated as fully misstated per ASA 530.11;
             {' '}{ev.anomalies.length} anomal{ev.anomalies.length===1?'y':'ies'} per ASA 530.13).
             Misstatements found: {ev.rows.filter(r=>(r.status==='tested'||r.status==='unable')&&Math.abs(r.misst)>1e-6).length}.
-            Most likely error {money(ev.netMLE)}; basic precision {money(ev.basicPrecision)};
-            upper misstatement limit <b>{money(ev.uml)}</b> at {sel.confidence}% confidence
+            Overstatement — most likely {money(ev.mleOver)}, upper misstatement limit <b>{money(ev.uml)}</b>
             {ev.anomalies.length>0 && <> (UML if anomalies treated as representative: {money(ev.umlIncl)})</>}.
-            {ev.mleUnder>1e-6 && <> Understatements of {money(ev.mleUnder)} (most likely) were noted — MUS cannot
-            reliably measure understatement; a separate completeness test is planned at [WP ref].</>}</>
+            {' '}Understatement — most likely {money(ev.mleUnder)}, lower misstatement limit {money(ev.lowerLimit)}
+            {exceedsUnder && <b> (exceeds tolerable misstatement — investigate)</b>}.
+            {' '}Minimum error cushion (basic precision) {money(ev.basicPrecision)}; net most likely error {money(ev.netMLE)}; at {sel.confidence}% confidence.
+            {' '}MUS has low power against understatement, so a separate completeness test is planned at [WP ref].</>
           : <span className="muted">[enter audited values on the Evaluate step]</span>}</p>
         <p><b>Conclusion:</b> {ev? (!ev.ready
             ? <span className="muted">[withheld — {ev.counts.untested+ev.counts.pending} item(s) unresolved]</span>
