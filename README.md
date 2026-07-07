@@ -3,8 +3,9 @@
 A single-page web app that helps financial statement auditors plan, draw and evaluate a
 **Monetary Unit Sample**. Everything runs in the browser — no data leaves the page.
 
-Open [`index.html`](index.html) in any modern browser. *(It loads React and Babel from a CDN,
-so an internet connection is needed the first time.)*
+Open [`Sampling.html`](Sampling.html) in any modern browser. *(It loads React and Babel from a CDN,
+so an internet connection is needed the first time.)* Styled with the Mosaic / Fluent 2 design
+tokens used across the VAGO EDMS pages.
 
 ## What it does
 
@@ -59,5 +60,6 @@ Outputs are a calculation aid — apply professional judgement and your firm/off
 
 ## Hosting
 
-Because it is a single static file named `index.html`, it can be published with **GitHub Pages**
-(Settings → Pages → deploy from the default branch) and shared as a link.
+Because it is a single static file, it can be published with **GitHub Pages**
+(Settings → Pages → deploy from the default branch) and shared as a link — the page will be at
+`/Sampling.html`. *(Rename the file back to `index.html` if you want it served at the site root.)*
