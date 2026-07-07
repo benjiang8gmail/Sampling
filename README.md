@@ -22,10 +22,16 @@ whose value ≥ the interval is flagged as a **key item** examined in full. The 
 basis (and the original signed amounts).
 
 **Step 3 — Evaluate & project errors**
-Enter the audited value beside each book value. For each sample item the tool computes the **tainting** and
-**projected misstatement**; key items use their actual misstatement. It reports the **most likely error**,
-**basic precision** and the **upper misstatement limit** (Stringer bound), and compares the UML with
-materiality to reach a conclusion. Export the evaluation to CSV.
+Enter the audited value beside each book value (or bulk-paste a column from Excel). Every selected item has a
+**status** — tested, not yet tested, **unable to test** (treated as fully misstated per ASA 530.11), or
+**anomaly** (excluded from projection with a mandatory justification per ASA 530.13, shown both ways). The
+**conclusion is withheld until every item is resolved**; meanwhile a best/worst-case UML range is shown. For
+each sample item the tool computes the **tainting** (capped at ±100% for the Stringer maths, with any excess
+disclosed); **key items use their actual misstatement uncapped**. It reports the **most likely error**,
+**basic precision** and the **upper misstatement limit** (Stringer bound) and compares the UML with tolerable
+misstatement. Understatements get a plain-English caution (MUS cannot reliably measure them — plan a separate
+completeness test). The evaluation CSV includes the ranked-taint **workings** so a reviewer can re-add the
+bound by hand.
 
 **Documentation (ASA)**
 A concise reference page (the **ASA · Documentation** tab) on what to record so the work meets the Australian
@@ -38,13 +44,20 @@ Each of Steps 1–3 also includes a live **Example documentation** working-paper
 section) that updates as you change inputs — modelling how to evidence the sample-size estimate, the selection,
 and the projection on the audit file.
 
-## Saving & recalling samples
+## Files, sessions & reperformance
 
 Enter your name in the **Performed by** field (top right) — it is remembered and used in default file names.
-After a sample is selected you can **save** it; the default name is `username_ddmmyy_HHMM_positive|negative`.
-Saved samples are kept in the browser's local storage and listed under **Saved samples** in Steps 2 and 3, where
-you can **Load** one back in before extrapolating errors, **Delete** it, or **Export** it to a JSON file (and
-**Import** it on another machine) for your working papers. CSV/JSON exports default to the same name.
+The whole session **auto-saves to the browser** (an accidental refresh loses nothing; *Reset session* in the
+footer starts fresh). One **Files** panel (Steps 2 and 3) saves the current sample (browser + CSV), **opens**
+any previously saved sample or evaluation CSV (type auto-detected), and lists what's saved with Load / Export
+CSV / Delete. Populations can be uploaded as **Excel (.xlsx)** or CSV.
+
+Every export is stamped with the **tool version**, run date/time, column choices, exclusion counts and a
+**population fingerprint** (row count, total and a checksum), so a reviewer can prove "same file". An optional
+**sort by reference before selecting** makes the selection order reconstructable from the data itself, and the
+one-click **Reperform check** re-runs a saved sample's selection against the loaded population and reports
+match/mismatch item by item. The Documentation tab includes a live **model workpaper (Part B)** built from the
+current session and a **how-to-reperform** guide (Part C).
 
 ## Methodology notes
 
