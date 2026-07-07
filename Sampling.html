@@ -109,7 +109,6 @@
   .conf-band{background:var(--bg-subtle);color:var(--fg-3);font-weight:600;font-size:11px;
     text-transform:uppercase;letter-spacing:.05em;border-radius:var(--radius) var(--radius) 0 0}
   .conf-head{background:var(--brand-fill);color:var(--brand-hover);font-weight:600}
-  .conf-head.sel,.mat-head.sel{background:var(--brand);color:#fff;border-color:var(--brand)}
   .mat-head{background:var(--brand-fill);color:var(--brand-hover);font-weight:600}
   .ee-low{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-stroke);font-weight:600}
   .ee-mod{background:var(--brand-fill);color:var(--brand-hover);border-color:var(--brand-stroke);font-weight:600}
@@ -253,7 +252,7 @@ const {useState,useEffect,useMemo,useRef} = React;
 
 // Tool version — stamped on every export and working paper so a reperformer
 // knows which selection/evaluation rules produced a result.
-const TOOL_VERSION = "2.1 (07/07/2026)";
+const TOOL_VERSION = "2.2 (07/07/2026)";
 const SESSION_KEY  = "mus_session_v1";
 
 /* ============================================================
@@ -725,11 +724,11 @@ function LookupTable({eeKey,label,accent,selConf,selMat}){
         <tr>
           <td className={accent}>{label}</td>
           {CONF_LEVELS.map(c=>(
-            <td key={c} className={"conf-head"+(selConf===c?" sel":"")}>{c}%</td>))}
+            <td key={c} className="conf-head">{c}%</td>))}
         </tr>
         {MAT_LEVELS.map(m=>(
           <tr key={m}>
-            <td className={"mat-head"+(selMat===m?" sel":"")}>{m}%</td>
+            <td className="mat-head">{m}%</td>
             {CONF_LEVELS.map(c=>{
               const hot=(selConf===c&&selMat===m);
               return <td key={c} className={"cell"+(hot?" hot":"")}>{data[c][m]}</td>;
@@ -747,8 +746,7 @@ function TableBlock({eeKey,label,accent,selConf,selMat,active}){
     <div>
       <div style={{display:'flex',alignItems:'center',gap:8,margin:'4px 0'}}>
         <span className={accent} style={{padding:'3px 9px',borderRadius:5}}>{label}</span>
-        {active && <span className="pill smp">your selection</span>}
-        <span style={{fontSize:11,color:'var(--muted)'}}>rows = Materiality&nbsp;%&nbsp;·&nbsp;cols = Confidence&nbsp;%</span>
+        <span style={{fontSize:11,color:'var(--muted)'}}>rows = materiality · columns = confidence · highlighted = your sample size</span>
       </div>
       <LookupTable eeKey={eeKey} label={label} accent={accent} selConf={selConf} selMat={selMat}/>
     </div>
@@ -798,32 +796,27 @@ function StepSize({S}){
   return (
     <div className="card">
       <h2><span className="step-no">Step 1.</span> Estimate the sample size</h2>
-      <p className="sub">Set your planning parameters; the required sample size is read from the DST guidance table.</p>
+      <p className="sub">Choose three parameters — the sample size comes from the DST table below.</p>
 
       <div className="grid g3">
         <div>
-          <label className="fld">Expected error level <span className="hint">(EE$)</span><Q t="How many misstatements you expect to find, based on risk assessment and prior years. More expected errors = a larger sample. MUS is unsuitable if many errors are expected."/></label>
+          <label className="fld">Expected error <span className="hint">(EE$)</span><Q t="How many misstatements you expect, from risk assessment and prior years. Low = few or none; Moderate = some (larger sample). MUS is unsuitable if many errors are expected."/></label>
           <div className="seg" role="group" aria-label="Expected error level">
             {["Low","Moderate"].map(x=>(
               <button key={x} className={S.ee===x?"on":""} aria-pressed={S.ee===x} onClick={()=>S.set({ee:x})}>{x}</button>))}
           </div>
-          <div className="hint" style={{marginTop:6}}>
-            {S.ee==="Low"?"Few/no misstatements expected.":"Some misstatements expected — larger sample."}
-          </div>
         </div>
         <div>
-          <label className="fld">Confidence level<Q t="How sure you want to be that the population is not materially misstated. 95% confidence means accepting a 5% risk the sample misses a material error. Higher confidence = a larger sample."/></label>
+          <label className="fld">Confidence level<Q t="How sure you want to be that the population is not materially misstated. 95% = accepting a 5% risk the sample misses a material error. Higher confidence = larger sample."/></label>
           <select value={S.confidence} onChange={e=>S.set({confidence:+e.target.value})}>
             {CONF_LEVELS.map(c=><option key={c} value={c}>{c}%</option>)}
           </select>
-          <div className="hint" style={{marginTop:6}}>Higher confidence → larger sample.</div>
         </div>
         <div>
-          <label className="fld">Materiality <span className="hint">(% of population)</span><Q t="The error size that would matter, expressed as a % of the population value. This is a convenience default — on the Evaluate step you should enter your actual tolerable misstatement in dollars."/></label>
+          <label className="fld">Materiality <span className="hint">(% of population)</span><Q t="The error size that would matter, as a % of the population value. Lower materiality = larger sample. This is a planning convenience — enter your actual tolerable misstatement in dollars on the Evaluate step."/></label>
           <select value={S.materiality} onChange={e=>S.set({materiality:+e.target.value})}>
             {MAT_LEVELS.map(m=><option key={m} value={m}>{m}%</option>)}
           </select>
-          <div className="hint" style={{marginTop:6}}>Lower materiality → larger sample.</div>
         </div>
       </div>
 
@@ -847,14 +840,12 @@ function StepSize({S}){
         </div>
       </details>
 
-      <div className="note"><b>Dual-purpose testing:</b> where your audit approach includes dual-purpose
-        testing, ensure your sample covers the minimum sample sizes for <i>both</i> the controls and the MUS tables.</div>
+      <div className="note"><b>Dual-purpose testing:</b> cover the minimum sample sizes for <i>both</i> the
+        controls and MUS tables.</div>
 
       <details className="method"><summary>How the sample size is used</summary>
-        <div>The table gives the number of sample items <code>n</code> for your chosen parameters.
-        In Step&nbsp;2 the <b>sampling interval</b> is calculated as
-        <code>population book value ÷ n</code>. Every item whose book value is greater than or equal to the
-        interval becomes a certainty ("key") selection that is examined in full.</div>
+        <div>Step&nbsp;2 turns <code>n</code> into a <b>sampling interval</b> ≈ population ÷ n. Items ≥ the
+        interval are examined in full ("key items"); the rest are sampled every interval-dollars.</div>
       </details>
 
       <h3>Example documentation — sample-size estimate <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· updates with your inputs</span></h3>
@@ -1093,9 +1084,8 @@ function StepSelect({S}){
   const noteReady = noteCount>0;
   return (
     <div className="card">
-      <h2><span className="step-no">Step 2.</span> Select the sample (Monetary Unit Sampling)</h2>
-      <p className="sub">Load your population, pick the amount column, set the sampling interval and a random
-        start, then draw a probability-proportional-to-size sample.</p>
+      <h2><span className="step-no">Step 2.</span> Select the sample</h2>
+      <p className="sub">Load your population, check the settings, then draw the sample.</p>
 
       <h3>1 · Population data</h3>
       <div className="row" style={{marginBottom:8}}>
@@ -1122,33 +1112,26 @@ function StepSelect({S}){
       <textarea placeholder="Paste rows from Excel or a CSV here — e.g.&#10;Reference, Customer, Amount&#10;INV-1001, Acme, 4820.55&#10;INV-1002, Globex, 92140.00"
         value={S.rawData} onChange={e=>S.set({rawData:e.target.value, intervalTouched:false})}/>
 
-      <div className="row" style={{marginTop:12,gap:16,alignItems:'flex-start'}}>
-        <div>
-          <label className="fld">Sample basis</label>
-          <div className="seg" style={{minWidth:260}} role="group" aria-label="Sample basis">
-            <button className={S.sampleBasis!=='negative'?"on":""} aria-pressed={S.sampleBasis!=='negative'}
-              onClick={()=>S.set({sampleBasis:'positive',intervalTouched:false,selection:null})}>Positive values</button>
-            <button className={S.sampleBasis==='negative'?"on":""} aria-pressed={S.sampleBasis==='negative'}
-              onClick={()=>S.set({sampleBasis:'negative',intervalTouched:false,selection:null})}>Negative values</button>
-          </div>
-        </div>
-        <div className="hint" style={{maxWidth:420,paddingTop:22}}>
-          {S.sampleBasis==='negative'
-            ? "Sampling the negative population (e.g. credit notes / refunds) on absolute amounts."
-            : "Sampling the positive population — the usual MUS basis for overstatement testing."}
+      <div style={{marginTop:12}}>
+        <label className="fld">Sample basis<Q t="Positive values is the usual MUS basis (overstatement testing). Negative values samples credits/refunds as their own population, on absolute amounts."/></label>
+        <div className="seg" style={{maxWidth:280}} role="group" aria-label="Sample basis">
+          <button className={S.sampleBasis!=='negative'?"on":""} aria-pressed={S.sampleBasis!=='negative'}
+            onClick={()=>S.set({sampleBasis:'positive',intervalTouched:false,selection:null})}>Positive values</button>
+          <button className={S.sampleBasis==='negative'?"on":""} aria-pressed={S.sampleBasis==='negative'}
+            onClick={()=>S.set({sampleBasis:'negative',intervalTouched:false,selection:null})}>Negative values</button>
         </div>
       </div>
 
       {parsed.length>0 && (
         <div className="grid g2" style={{marginTop:12}}>
           <div>
-            <label className="fld">Amount column <span className="hint">(sampling is based on this)</span></label>
+            <label className="fld">Amount column<Q t="The dollar column the sampling is based on — every dollar in it is a potential selection."/></label>
             <select value={S.amountCol} onChange={e=>S.set({amountCol:+e.target.value,intervalTouched:false})}>
               {colNames.map((n,i)=><option key={i} value={i}>{n}</option>)}
             </select>
           </div>
           <div>
-            <label className="fld">Reference / ID column <span className="hint">(optional)</span></label>
+            <label className="fld">Reference column<Q t="How selected items are identified in results and exports — an invoice/document number is ideal. Optional; row numbers are used otherwise."/></label>
             <select value={S.refCol} onChange={e=>S.set({refCol:+e.target.value})}>
               <option value={-1}>— use row number —</option>
               {colNames.map((n,i)=><option key={i} value={i}>{n}</option>)}
@@ -1159,9 +1142,9 @@ function StepSelect({S}){
 
       {parsed.length>0 && (
         <>
-          <div className="hint" style={{margin:'12px 0 4px'}}>Preview — first rows as read
-            (<span style={{background:'var(--brand-fill)',padding:'0 5px',borderRadius:3,color:'var(--brand-press)'}}>amount</span> and
-            {' '}<span style={{background:'var(--bg-hover)',padding:'0 5px',borderRadius:3}}>reference</span> columns highlighted):</div>
+          <div className="hint" style={{margin:'12px 0 4px'}}>Preview —
+            {' '}<span style={{background:'var(--brand-fill)',padding:'0 5px',borderRadius:3,color:'var(--brand-press)'}}>amount</span> and
+            {' '}<span style={{background:'var(--bg-hover)',padding:'0 5px',borderRadius:3}}>reference</span> highlighted:</div>
           <div className="scrollx" style={{maxHeight:220}}>
             <table className="data">
               <thead><tr>{colNames.map((n,i)=>
@@ -1203,49 +1186,44 @@ function StepSelect({S}){
       )}
       {parsed.length>0 && (pop.excludedWrongSign>0||pop.badParse>0||pop.excludedTotals>0) &&
         <div className="note">
-          {pop.excludedTotals>0 && <><b>{pop.excludedTotals} totals/subtotal row(s) ignored</b> (a cell reads “Total”, “Subtotal” or “Sum”). </>}
-          {(pop.excludedWrongSign>0||pop.badParse>0) && (pop.wantNeg
-            ? "Zero, positive or non-numeric items are excluded — only negative items are sampled here, on their absolute amounts. "
-            : "Zero, negative or non-numeric items are excluded — MUS draws from positive book values only. ")}
-          Test any excluded items separately.</div>}
+          {pop.excludedTotals>0 && <><b>{pop.excludedTotals} totals row(s) ignored.</b> </>}
+          Excluded rows (click the cards to list them) are not sampled — test them separately.</div>}
 
       <h3>2 · Sampling parameters</h3>
       <div className="grid g3">
         <div>
-          <label className="fld">Sample size (n)</label>
+          <label className="fld">Sample size (n)<Q t="How many items to test — from the Step 1 table. You can override it; the interval adjusts automatically."/></label>
           <input type="number" value={S.sampleSize}
             onChange={e=>S.set({sampleSize:Math.max(1,+e.target.value||1),intervalTouched:false})}/>
-          <div className="hint" style={{marginTop:5}}>From Step 1: {S.ee} EE$, {S.confidence}%, {S.materiality}%
-            = <b>{SAMPLE_TABLES[S.ee][S.confidence][S.materiality]}</b>
+          <div className="hint" style={{marginTop:5}}>Step 1 table: <b>{SAMPLE_TABLES[S.ee][S.confidence][S.materiality]}</b>
             {S.sampleSize!==SAMPLE_TABLES[S.ee][S.confidence][S.materiality] &&
               <a style={{marginLeft:6,cursor:'pointer',color:'var(--teal)'}}
                 onClick={()=>S.set({sampleSize:SAMPLE_TABLES[S.ee][S.confidence][S.materiality],intervalTouched:false})}>reset</a>}
           </div>
         </div>
         <div>
-          <label className="fld">Sampling interval<Q t="The dollar stride between selections. Every item at or above the interval is examined in full (a key item); the rest are picked every interval-dollars along the population. Defaults to a value that yields about n distinct items."/></label>
+          <label className="fld">Sampling interval<Q t="The dollar stride between selections. Items at or above the interval are examined in full (key items); the rest are picked every interval-dollars. Defaults to a value that yields about n distinct items."/></label>
           <NumText value={S.interval} ariaLabel="Sampling interval"
             onChange={v=>S.set({interval:v,intervalTouched:true})}/>
           <div className="hint" style={{marginTop:5}}>
             {intervalOk
-              ? <><b>{num0(keyCountAtInterval)}</b> item(s) ≥ this interval are examined in full; the rest are MUS-sampled.</>
-              : "Load data to derive the interval."}
+              ? <><b>{num0(keyCountAtInterval)}</b> key item(s) ≥ this interval.</>
+              : "Load data first."}
             {S.intervalTouched && suggestedInterval>0 &&
               <a style={{marginLeft:6,cursor:'pointer',color:'var(--teal)'}}
                 onClick={()=>S.set({interval:suggestedInterval.toFixed(2),intervalTouched:false})}>use suggested</a>}
           </div>
         </div>
         <div>
-          <label className="fld">Random start <span className="hint">(0 &lt; start ≤ interval)</span><Q t="Where the first stride lands. This is the only random element — the same population order, interval and random start always reproduce the identical sample."/></label>
+          <label className="fld">Random start<Q t="Where the first stride lands (over 0, at most the interval). The only random element — the same population order, interval and random start always reproduce the identical sample, so it is recorded in every export."/></label>
           <div className="row" style={{flexWrap:'nowrap'}}>
             <NumText value={S.randomStart} ariaLabel="Random start"
               onChange={v=>S.set({randomStart:v})}/>
             <button className="btn ghost sm" style={{flex:'none'}} onClick={genStart} disabled={!intervalOk}
               aria-label="Generate a new random start" title="Generate a new random start">↻</button>
           </div>
-          <div className="hint" style={{marginTop:5}}>Document this for reproducibility.
-            {!startOk && S.randomStart!=='' && <span className="err"> Must be &gt; 0 and ≤ interval.</span>}
-          </div>
+          {!startOk && S.randomStart!=='' &&
+            <div className="err" style={{marginTop:5}}>Must be &gt; 0 and ≤ interval.</div>}
         </div>
       </div>
 
@@ -1262,10 +1240,9 @@ function StepSelect({S}){
           <h3>Selected sample — {sel.items.length} items
             ({sel.items.filter(i=>i.isKey).length} key, {sel.items.filter(i=>!i.isKey).length} sample)</h3>
           <div className="note">
-            {sel.sampleBasis==='negative' && <><b>Negative-value basis:</b> amounts shown are absolute values of the selected negative (e.g. credit) items. </>}
-            <b>{num0(sel.items.filter(i=>i.isKey).length)}</b> item(s) ≥ the interval pre-selected as <b>key items</b> (examined in full);
-            the remaining <b>{num0(sel.items.filter(i=>!i.isKey).length)}</b> selected by MUS. Interval <b>{money(sel.interval)}</b> ·
-            random start <b>{sel.randomStart>0?money(sel.randomStart):'not recorded'}</b> · no item is selected more than once.</div>
+            Interval <b>{money(sel.interval)}</b> · random start <b>{sel.randomStart>0?money(sel.randomStart):'not recorded'}</b> ·
+            {' '}<b>{num0(sel.items.filter(i=>i.isKey).length)}</b> key item(s) tested in full + <b>{num0(sel.items.filter(i=>!i.isKey).length)}</b> MUS selections
+            {sel.sampleBasis==='negative' && <> · negative basis (absolute amounts shown)</>}.</div>
           <div className="row" style={{margin:'6px 0'}}>
             <input type="text" placeholder="Search reference…" value={selQ} onChange={e=>setSelQ(e.target.value)}
               style={{maxWidth:220}} aria-label="Search selected sample"/>
@@ -1291,7 +1268,8 @@ function StepSelect({S}){
                     <td>{r.__i+1}</td><td>{r.ref}</td>
                     <td className="num">{money(r.amount)}</td>
                     <td className="num">{money(r.cumEnd)}</td>
-                    <td><span className={"pill "+(r.isKey?"key":"smp")}>{r.isKey?"Key (100%)":"Sample"}</span></td>
+                    <td><span className={"pill "+(r.isKey?"key":"smp")}
+                      title={r.isKey?"At or above the interval — examined in full":"Selected by probability proportional to size"}>{r.isKey?"Key (100%)":"Sample"}</span></td>
                     <td className="num">{r.nHits}</td>
                   </tr>
                 ))}
@@ -1302,15 +1280,11 @@ function StepSelect({S}){
       )}
 
       <details className="method"><summary>Selection methodology</summary>
-        <div>This uses <b>two-stratum Monetary Unit Sampling</b>. First, every item whose value ≥ the sampling
-        interval is an <b>individually significant ("key") item</b>, examined in full and counted once. The
-        remaining sub-interval population is then selected by <b>systematic probability-proportional-to-size
-        MUS</b> — accumulating book values and taking a hit every <code>interval</code> dollars from the random
-        start, so larger items are more likely to be chosen. <b>No item is ever selected more than once.</b><br/><br/>
-        The default interval is derived from your sample size so the total is about <code>n</code> distinct items;
-        because removing key items lowers the interval, items below the original Population ÷ n interval but above
-        the recomputed one also become key items. Reproduce a selection exactly by recording the population order,
-        the interval and the random start.</div>
+        <div><b>Two-stratum MUS.</b> Items ≥ the interval are key items — examined in full, counted once. The rest
+        are selected systematically: book values accumulate and a hit is taken every <code>interval</code> dollars
+        from the random start, so larger items are more likely to be chosen. No item is selected twice. The default
+        interval is derived so the total is about <code>n</code> distinct items. Population order + interval +
+        random start reproduce the selection exactly.</div>
       </details>
 
       <h3>Example documentation — sample selection <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· updates with your selections</span></h3>
@@ -1375,8 +1349,7 @@ function StepEvaluate({S}){
   if(!sel) return (
     <div className="card">
       <h2><span className="step-no">Step 3.</span> Evaluate &amp; project errors</h2>
-      <div className="callout info">Draw a sample in Step 2 first, or open a previously saved sample or evaluation
-        below — the selected items will appear here for you to enter audited values.</div>
+      <div className="callout info">Draw a sample in Step 2, or open a saved sample or evaluation below.</div>
       <FilesPanel S={S}/>
     </div>
   );
@@ -1501,18 +1474,17 @@ function StepEvaluate({S}){
   return (
     <div className="card">
       <h2><span className="step-no">Step 3.</span> Evaluate &amp; project errors</h2>
-      <p className="sub">Enter the audited (correct) value beside each book value. Misstatements found in the
-        sample are projected to the population.</p>
+      <p className="sub">Enter what each item should have been — errors are projected to the population.</p>
       {S.loadedName && <div className="note">Loaded: <b>{S.loadedName}</b>.</div>}
 
       {!ev.ready ? (
         <div className="banner hold">
-          <span className="b-t">⏳ {toGo} of {sel.items.length} item(s) still to resolve</span>
+          <span className="b-t">⏳ {toGo} of {sel.items.length} to resolve</span>
           <span style={{flex:1}}>
-            Enter audited values{ev.counts.pending>0? ', confirm the '+ev.counts.pending+' entr'+(ev.counts.pending===1?'y':'ies')+' over 100%':''},
-            or mark items <b>U</b>nable to test. The conclusion is withheld until every item is resolved.
+            Enter audited values{ev.counts.pending>0? ', confirm the '+ev.counts.pending+' over 100%':''},
+            or mark items <b>U</b> (unable to test). The conclusion appears once every item is resolved.
             {range && <span className="hint" style={{display:'block',marginTop:2}}>
-              If the rest are clean: UML {money(range.best)} · if the rest are fully wrong: {money(range.worst)} (vs tolerable {money(matDollar)}).</span>}
+              Rest clean → UML {money(range.best)} · rest fully wrong → {money(range.worst)} (tolerable {money(matDollar)}).</span>}
           </span>
         </div>
       ) : (
@@ -1541,9 +1513,14 @@ function StepEvaluate({S}){
       <div className="scrollx">
         <table className="data">
           <thead><tr>
-            <th>#</th><th>Reference</th><th className="num">Book value</th><th className="num">Audited value</th>
-            <th>Status</th><th className="num">Misstatement</th><th className="num">Tainting&nbsp;%</th>
-            <th className="num">Projected</th><th>Type</th><th>Actions</th>
+            <th>#</th><th>Reference</th>
+            <th className="num" title="The recorded amount being tested">Book value</th>
+            <th className="num" title="What the amount should be, per your testing">Audited value</th>
+            <th title="Tested · Untested · Unable to test (counts as fully misstated) · Anomaly">Status</th>
+            <th className="num" title="Book − audited. Positive = overstated">Misstatement</th>
+            <th className="num" title="Misstatement ÷ book value, capped at ±100% for projection">Tainting&nbsp;%</th>
+            <th className="num" title="Sample items: tainting × interval. Key items: the actual error">Projected</th>
+            <th title="Key = ≥ interval, tested in full · Sample = MUS selection">Type</th><th>Actions</th>
           </tr></thead>
           <tbody>
             {view.map(({r,i},vi)=>(
@@ -1562,7 +1539,8 @@ function StepEvaluate({S}){
                 <td className="num">{(r.status!=='tested'&&r.status!=='unable')||r.isKey ? '—'
                   : (r.taint*100).toFixed(1)+'%'+(r.capped?' ⚠':'')}</td>
                 <td className="num">{(r.status==='tested'||r.status==='unable')?money(r.projected):'—'}</td>
-                <td><span className={"pill "+(r.isKey?"key":"smp")}>{r.isKey?"Key":"Sample"}</span></td>
+                <td><span className={"pill "+(r.isKey?"key":"smp")}
+                  title={r.isKey?"At or above the interval — examined in full":"Selected by probability proportional to size"}>{r.isKey?"Key":"Sample"}</span></td>
                 <td>
                   <div style={{display:'flex',gap:4}}>
                     {r.status==='pending' &&
@@ -1592,9 +1570,12 @@ function StepEvaluate({S}){
             = {money(sel.total*sel.materiality/100)}.</div>
         </div>
         <div className="statgrid" style={{gridTemplateColumns:'1fr 1fr'}}>
-          <Stat k="Most likely error (net)" v={money(ev.netMLE)} tone="var(--navy)"/>
-          <Stat k="Upper misstatement limit" big v={money(ev.uml)} tone={exceeds?'var(--warn)':'var(--ok)'}/>
-          <Stat k="Basic precision" v={money(ev.basicPrecision)}/>
+          <Stat k="Most likely error (net)" v={money(ev.netMLE)} tone="var(--navy)"
+            title="Best estimate of total error: projected sample errors plus actual key-item errors (overstatements net of understatements)"/>
+          <Stat k="Upper misstatement limit" big v={money(ev.uml)} tone={exceeds?'var(--warn)':'var(--ok)'}
+            title="Most likely error plus a statistical safety buffer — we are confident the true overstatement is no worse than this. Compare with tolerable misstatement"/>
+          <Stat k="Basic precision" v={money(ev.basicPrecision)}
+            title="The buffer carried even with zero errors found — a clean sample never proves the population is error-free. RF(0) × interval"/>
         </div>
       </div>
 
@@ -1623,20 +1604,16 @@ function StepEvaluate({S}){
             are by definition extremely rare (ASA 530.13).</b>}</div>}
         </div>
       ) : (
-        <div className="note"><b>Conclusion withheld.</b> {toGo} selected item(s) are not yet resolved. Under
-          ASA 530.11 an item you cannot test is treated as <i>misstated</i>, not clean — so the tool will not
-          conclude while items are blank. Enter audited values, or use <b>U</b> for items that genuinely cannot
-          be tested.</div>
+        <div className="note"><b>Conclusion withheld</b> — {toGo} item(s) unresolved. An item you cannot test counts
+          as <i>misstated</i>, not clean (ASA 530.11) — enter audited values, or mark it <b>U</b>.</div>
       )}
 
       {ev.mleUnder>1e-6 && (
         <div className="callout" style={{background:'var(--warn-o-bg)',borderColor:'var(--warn-o-stroke)'}}>
-          <div className="ttl" style={{color:'var(--warn-o)'}}>Understatements were found — read this before relying on them</div>
-          <div>Most likely understatement <b>{money(ev.mleUnder)}</b>. MUS is built to catch <b>over</b>statement —
-            understated items are small precisely <i>because</i> they are understated, so this sample cannot reliably
-            measure how much understatement exists. Treat this figure as a signal only, and plan a separate
-            completeness-directed test (for example a search for unrecorded liabilities or a subsequent-payments
-            review). An indicative figure is included in the CSV export for the record.</div>
+          <div className="ttl" style={{color:'var(--warn-o)'}}>Understatements found — treat as a signal only</div>
+          <div>Most likely understatement <b>{money(ev.mleUnder)}</b>. MUS is built to catch <b>over</b>statement and
+            cannot reliably measure understatement — plan a separate completeness test (e.g. search for unrecorded
+            liabilities). Details are in the CSV export.</div>
         </div>
       )}
 
@@ -1687,19 +1664,14 @@ function StepEvaluate({S}){
 
       <details className="method"><summary>Projection methodology (Stringer bound)</summary>
         <div>
-          For each <b>sample item</b> (book value &lt; interval) the <b>tainting</b> =
-          <code>(book − audited) ÷ book</code>, capped at ±100% <i>for the projection maths only</i> (the Stringer
-          method requires taints between −100% and +100%; any excess over book value is reported separately), and the
-          <b> projected misstatement</b> = <code>tainting × interval</code>.
-          <b> Key items</b> (book value ≥ interval) are examined in full, so their <b>actual misstatement is used
-          uncapped</b> — no projection is involved. Items that <b>cannot be tested</b> are treated as fully misstated
-          (ASA 530.11), and <b>anomalies</b> are excluded from the projection but still counted as actual misstatements
-          (ASA 530.13). The <b>most likely error</b> is the sum of projected misstatements.<br/><br/>
-          The <b>upper misstatement limit</b> adds an allowance for sampling risk using the Stringer bound:
-          <code>UML = interval × [ R(0) + Σ taintᵢ × (R(i) − R(i−1)) ] + key-item misstatements</code>,
-          where taints are ranked largest first and <code>R(k)</code> is the Poisson reliability factor for
-          <code>k</code> overstatements at {sel.confidence}% confidence (<code>R(0) = {ev.RF0.toFixed(2)}</code>).
-          Overstatements and understatements are evaluated separately. Compare the UML with materiality to conclude.
+          <b>Sample items:</b> tainting = <code>(book − audited) ÷ book</code>, capped at ±100% for the maths
+          (any excess is disclosed separately); projected = <code>tainting × interval</code>.
+          <b> Key items:</b> actual misstatement, uncapped. <b>Unable to test</b> = fully misstated (ASA 530.11);
+          <b>anomalies</b> excluded from projection but still actual misstatements (ASA 530.13).<br/><br/>
+          <b>UML</b> = <code>interval × [ R(0) + Σ taintᵢ × (R(i) − R(i−1)) ] + key-item errors</code>, taints ranked
+          largest first, <code>R(k)</code> = Poisson reliability factor at {sel.confidence}% confidence
+          (<code>R(0) = {ev.RF0.toFixed(2)}</code>). Over- and understatements are evaluated separately.
+          The CSV export shows this build-up line by line.
         </div>
       </details>
 
@@ -1812,8 +1784,7 @@ function FilesPanel({S, pop}){
         <button className="btn teal sm" onClick={doSave} disabled={!canSave}>Save current sample</button>
         <button className="btn ghost sm" onClick={()=>fileRef.current.click()}>Open file…</button>
         <input ref={fileRef} type="file" accept=".csv,.json,text/csv,application/json" style={{display:'none'}} onChange={doOpen}/>
-        <span className="hint">Save writes to this browser <b>and</b> a CSV file. Open reads a saved sample or a
-          downloaded evaluation — the type is detected automatically.</span>
+        <span className="hint">Save = this browser + a CSV file. Open reads any saved sample or evaluation CSV.</span>
       </div>
       {msg && <div className={msg.t==='ok'?'note':'err'} style={{marginTop:8}}>{msg.m}</div>}
 
@@ -1843,8 +1814,8 @@ function FilesPanel({S, pop}){
           </table>
         </div>
       )}
-      {list.length===0 && <div className="note" style={{marginTop:8}}>Nothing saved in this browser yet — draw a
-        sample and click <b>Save current sample</b>, or <b>Open</b> a previously saved CSV.</div>}
+      {list.length===0 && <div className="note" style={{marginTop:8}}>Nothing saved yet — draw a sample and
+        <b> Save</b>, or <b>Open</b> a saved CSV.</div>}
 
       {pop && pop.count>0 && list.length>0 && (
         <div className="savebar" style={{marginTop:10}}>
@@ -1894,8 +1865,8 @@ function StepDocs({S}){
   return (
     <div className="card docs">
       <h2><span className="step-no">Documentation.</span> Evidencing your MUS work under the Australian Auditing Standards</h2>
-      <p className="sub">What to record so your MUS work meets the AUASB standards. Paragraph references are to the
-        compiled standards — confirm against the current versions and apply your office methodology.</p>
+      <p className="sub">What to record to meet the AUASB standards. Confirm paragraph references against the current
+        compiled standards and apply your office methodology.</p>
 
       <div className="callout info">
         <div className="ttl">The standards that apply</div>
@@ -1913,12 +1884,8 @@ function StepDocs({S}){
       </div>
 
       <h3 style={{fontSize:12}}>Part A — what to record</h3>
-      <div className="callout info">
-        <div className="ttl">Worked example on every step</div>
-        <div>Steps 1–3 each show a live <b>working-paper note</b> for a supplies-and-services DST that fills in with
-          your actual figures — copy it straight onto the file. The <b>Record</b> lists below set out what each note
-          should cover, and <b>Part B</b> assembles them into one model workpaper from your current session.</div>
-      </div>
+      <div className="note">Steps 1–3 each show a live working-paper note that fills in with your figures;
+        <b> Part B</b> below assembles them into one model workpaper.</div>
 
       <h3>(a) Documenting the sample-size estimate</h3>
       <p><b>Record</b> (<AsaRef>ASA 530</AsaRef> para 6–7; <AsaRef>ASA 320</AsaRef>; <AsaRef>ASA 230</AsaRef> para 8):</p>
@@ -2005,27 +1972,20 @@ function StepDocs({S}){
       </div>
 
       <h3 style={{fontSize:12}}>Part C — reperforming the selection</h3>
-      <p>A reviewer must be able to re-run your selection and land on the identical items. The selection is fully
-        determined by three things — <b>the population and its order, the sampling interval, and the random start</b> —
-        so reperformance is guaranteed if those are evidenced:</p>
+      <p>The selection is fully determined by <b>the population and its order, the interval, and the random
+        start</b> — evidence those three and reperformance is guaranteed:</p>
       <ul className="rec">
-        <li><b>Keep the source file</b> and record its <b>fingerprint</b> (the tool computes one — row count, total and
-          a checksum — and writes it into every export). A matching fingerprint proves "same population"; a claim isn't proof.</li>
-        <li><b>Pin down the order</b> — tick <i>Sort by reference before selecting</i> so the order is reconstructable
-          from the data itself, or record that file order was used.</li>
-        <li><b>Record the settings</b> — the exported selection CSV carries the amount/reference columns, header and
-          sort settings, exclusions, interval, random start, date and the tool version.</li>
-        <li><b>Keep the exports</b> — the selection CSV is the record of items tested; the evaluation CSV shows the
-          ranked-taint workings so the Stringer bound can be re-added with a calculator.</li>
+        <li><b>Keep the source file</b>; its <b>fingerprint</b> (row count, total, checksum) is written into every
+          export — a match proves "same population".</li>
+        <li><b>Pin down the order</b> — tick <i>Sort by reference before selecting</i>, or record that file order was used.</li>
+        <li><b>Keep the exports</b> — the selection CSV records every setting and the items tested; the evaluation CSV
+          shows the workings so the bound can be re-added by hand.</li>
       </ul>
       <div className="callout info">
         <div className="ttl">To reperform</div>
-        <div>Open the retained source file on the Select step → apply the same sort setting → enter the recorded
-          interval and random start → <b>Draw sample</b> → agree the selected references to the retained selection CSV.
-          Or use the one-click <b>Reperform check</b> in the Files panel on the Select step — it re-runs the selection
-          with a saved sample's parameters and reports match or mismatch item by item (and compares fingerprints).
-          Any difference means the population, its order, or a parameter changed. The random start is the only random
-          element — identical inputs must reproduce the identical sample.</div>
+        <div>Open the retained file on the Select step → same sort setting → enter the recorded interval and random
+          start → <b>Draw sample</b> → agree the references to the retained CSV. Or one click: <b>Reperform check</b>
+          in the Files panel re-runs a saved sample's parameters and reports match or mismatch, item by item.</div>
       </div>
 
       <div className="note"><b>Disclaimer.</b> This is general guidance to help structure your documentation; it is not a
@@ -2187,10 +2147,10 @@ function App(){
       <header className="app"><div className="wrap head-row">
         <div>
           <h1>Monetary Unit Sampling <span className="tag">AUDIT TOOL</span></h1>
-          <p>All calculations run in your browser — nothing you enter leaves this page.</p>
+          <p>Runs entirely in your browser — nothing you enter leaves this page.</p>
         </div>
         <div className="who">
-          <label htmlFor="who-in">Performed by (used in file names)</label>
+          <label htmlFor="who-in" title="Recorded as the performer and used in default file names">Performed by</label>
           <input id="who-in" type="text" value={username} onChange={e=>setUsername(e.target.value)}
             placeholder="your name / initials"/>
         </div>
@@ -2220,9 +2180,8 @@ function App(){
         {st.step===3 && <StepEvaluate S={S}/>}
         {st.step===4 && <StepDocs S={S}/>}
         <div className="ftr">
-          MUS tool {TOOL_VERSION} · sample-size tables per VAGO DST guidance · reliability factors via the Poisson
-          distribution · review outputs with professional judgement.<br/>
-          Your work is saved automatically in this browser · <span className="linklike" onClick={resetSession}>Reset session</span>
+          MUS tool {TOOL_VERSION} · VAGO DST tables · Poisson reliability factors · apply professional judgement<br/>
+          Work is auto-saved in this browser · <span className="linklike" onClick={resetSession}>Reset session</span>
         </div>
       </div>
     </>
