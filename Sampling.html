@@ -108,14 +108,15 @@
   table.mus td,table.mus th{border:1px solid var(--stroke);padding:8px 6px;text-align:center}
   .conf-band{background:var(--bg-subtle);color:var(--fg-3);font-weight:600;font-size:11px;
     text-transform:uppercase;letter-spacing:.05em;border-radius:var(--radius) var(--radius) 0 0}
-  .conf-head{background:var(--brand);color:#fff;font-weight:600}
+  .conf-head{background:var(--brand-fill);color:var(--brand-hover);font-weight:600}
+  .conf-head.sel,.mat-head.sel{background:var(--brand);color:#fff;border-color:var(--brand)}
   .mat-head{background:var(--brand-fill);color:var(--brand-hover);font-weight:600}
   .ee-low{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-stroke);font-weight:600}
   .ee-mod{background:var(--brand-fill);color:var(--brand-hover);border-color:var(--brand-stroke);font-weight:600}
   .vlabel{writing-mode:vertical-rl;transform:rotate(180deg);background:var(--bg-subtle);color:var(--fg-4);
     font-weight:600;font-size:11px;letter-spacing:.05em}
   td.cell{background:var(--bg-surface);color:var(--fg);font-variant-numeric:tabular-nums}
-  td.cell.hot{background:var(--brand-fill-2);box-shadow:inset 0 0 0 2px var(--brand);color:var(--brand-press);font-weight:700}
+  td.cell.hot{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:700}
 
   table.data{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px}
   table.data th{position:sticky;top:0;z-index:2;background:var(--bg-surface);color:var(--fg-3);font-weight:600;
@@ -724,12 +725,11 @@ function LookupTable({eeKey,label,accent,selConf,selMat}){
         <tr>
           <td className={accent}>{label}</td>
           {CONF_LEVELS.map(c=>(
-            <td key={c} className="conf-head"
-                style={selConf===c?{boxShadow:'inset 0 -3px 0 var(--hi)'}:{}}>{c}%</td>))}
+            <td key={c} className={"conf-head"+(selConf===c?" sel":"")}>{c}%</td>))}
         </tr>
         {MAT_LEVELS.map(m=>(
           <tr key={m}>
-            <td className="mat-head" style={selMat===m?{boxShadow:'inset 3px 0 0 var(--hi)'}:{}}>{m}%</td>
+            <td className={"mat-head"+(selMat===m?" sel":"")}>{m}%</td>
             {CONF_LEVELS.map(c=>{
               const hot=(selConf===c&&selMat===m);
               return <td key={c} className={"cell"+(hot?" hot":"")}>{data[c][m]}</td>;
@@ -888,11 +888,15 @@ function StepSelect({S}){
   const [selSort,setSelSort]=useState(null);          // null | 'ref' | 'amt'
   const parsed = useMemo(()=> S.rawData.trim()? parseDelimited(S.rawData):[], [S.rawData]);
   const headerRow = parsed.length? parsed[0]:[];
-  const colCount = parsed.reduce((m,r)=>Math.max(m,r.length),0);
-  const colNames = S.hasHeader
+  const colCount = useMemo(()=> parsed.reduce((m,r)=>Math.max(m,r.length),0), [parsed]);
+  const colNames = useMemo(()=> S.hasHeader
     ? Array.from({length:colCount},(_,i)=> (headerRow[i]&&headerRow[i].trim())||("Column "+(i+1)))
-    : Array.from({length:colCount},(_,i)=>"Column "+(i+1));
-  const bodyRows = S.hasHeader? parsed.slice(1):parsed;
+    : Array.from({length:colCount},(_,i)=>"Column "+(i+1)),
+  // eslint-disable-next-line
+  [parsed,S.hasHeader,colCount]);
+  // memoised — a fresh array every render would cascade into the pop memo and
+  // the fingerprint effect, recomputing over the whole file on every keystroke
+  const bodyRows = useMemo(()=> S.hasHeader? parsed.slice(1):parsed, [parsed,S.hasHeader]);
 
   // auto-detect amount + reference columns when data changes
   useEffect(()=>{
@@ -945,12 +949,18 @@ function StepSelect({S}){
       unparsed,wrongSignRows,totalsRows,wantNeg};
   },[bodyRows,S.amountCol,S.refCol,S.sampleBasis,S.sortByRef]);
 
-  // population fingerprint — recomputed whenever the effective population changes
+  // population fingerprint — recomputed whenever the effective population changes.
+  // Guarded against redundant state writes so it can never render-loop.
   useEffect(()=>{
     let alive=true;
-    if(pop.count===0){ S.set({fingerprint:null}); return; }
+    if(pop.count===0){ if(S.fingerprint!==null) S.set({fingerprint:null}); return; }
     const text=pop.items.map(it=>it.ref+'|'+it.amount.toFixed(2)).join('\n');
-    computeFingerprint(text).then(fp=>{ if(alive) S.set({fingerprint:{...fp, rows:pop.count, total:pop.total}}); });
+    computeFingerprint(text).then(fp=>{
+      if(!alive) return;
+      const cur=S.fingerprint;
+      if(cur && cur.hash===fp.hash && cur.rows===pop.count) return;   // unchanged — no state write
+      S.set({fingerprint:{...fp, rows:pop.count, total:pop.total}});
+    });
     return ()=>{ alive=false; };
   // eslint-disable-next-line
   },[pop.items]);
@@ -1105,6 +1115,10 @@ function StepSelect({S}){
         {S.rawData && <button className="btn ghost sm" onClick={()=>S.set({rawData:'',selection:null})}>Clear</button>}
       </div>
       {fileMsg && <div className={fileMsg.t==='ok'?'note':'err'} style={{marginBottom:8}}>{fileMsg.m}</div>}
+      {S.rawDataOmitted && !S.rawData.trim() &&
+        <div className="note" style={{marginBottom:8}}><b>Population not restored:</b> it was too large to auto-save in
+          this browser. Your drawn sample and evaluation were preserved — re-upload the source file here if you need to
+          redraw or run a reperform check.</div>}
       <textarea placeholder="Paste rows from Excel or a CSV here — e.g.&#10;Reference, Customer, Amount&#10;INV-1001, Acme, 4820.55&#10;INV-1002, Globex, 92140.00"
         value={S.rawData} onChange={e=>S.set({rawData:e.target.value, intervalTouched:false})}/>
 
@@ -2041,19 +2055,25 @@ function App(){
   });
   const set=(patch)=>setSt(s=>({...s,...patch}));
 
-  // ---- auto-save the session to this browser on every change ----
+  // ---- auto-save the session to this browser (debounced; a very large pasted
+  // population is not persisted — stringifying megabytes on every keystroke
+  // makes the whole UI feel dead, and it would blow the localStorage quota) ----
   const persistFailed=useRef(false);
   useEffect(()=>{
-    try{
-      window.localStorage.setItem(SESSION_KEY, JSON.stringify(st));
-      persistFailed.current=false;
-    }catch(e){
-      // quota — retry without the (possibly huge) raw population text
-      try{ const {rawData, ...rest}=st;
-        window.localStorage.setItem(SESSION_KEY, JSON.stringify(rest));
-        persistFailed.current=false;
-      }catch(e2){ persistFailed.current=true; }
-    }
+    const t=setTimeout(()=>{
+      const big = st.rawData && st.rawData.length>1000000;
+      const sess = big ? {...st, rawData:'', rawDataOmitted:true} : st;
+      try{
+        window.localStorage.setItem(SESSION_KEY, JSON.stringify(sess));
+        persistFailed.current=big;      // population itself not saved → warn on close
+      }catch(e){
+        try{
+          window.localStorage.setItem(SESSION_KEY, JSON.stringify({...st, rawData:'', rawDataOmitted:true}));
+        }catch(e2){}
+        persistFailed.current=true;
+      }
+    },500);
+    return ()=>clearTimeout(t);
   },[st]);
   // warn on close only when auto-save is not working and there is real work in flight
   useEffect(()=>{
