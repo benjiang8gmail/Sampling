@@ -1,0 +1,2372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Monetary Unit Sampling — Audit Tool</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+/* ============================================================
+   Mosaic design tokens — Fluent 2 light theme.
+   Identical values to clients.html / milestones.html, plus
+   legacy aliases so this app's existing markup keeps working.
+   ============================================================ */
+  :root{
+    --font:"Segoe UI Variable Text","Segoe UI",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+    --font-display:"Segoe UI Variable Display","Segoe UI",-apple-system,system-ui,sans-serif;
+    --mono:"Cascadia Code","SF Mono",Consolas,monospace;
+    --brand:#0f6cbd;--brand-hover:#115ea3;--brand-press:#0c3b5e;
+    --brand-fill:#ebf3fc;--brand-fill-2:#cfe4fa;--brand-stroke:#b4d6fa;
+    --bg-canvas:#f5f5f5;--bg-surface:#ffffff;--bg-subtle:#fafafa;--bg-hover:#f0f0f0;--bg-press:#e8e8e8;
+    --stroke:#e0e0e0;--stroke-2:#d1d1d1;
+    --fg:#242424;--fg-2:#424242;--fg-3:#616161;--fg-4:#707070;--fg-disabled:#bdbdbd;
+    --ok:#0e700e;--ok-bg:#f1faf1;--ok-stroke:#9fd89f;
+    --warn-o:#8a3707;--warn-o-bg:#fff9f5;--warn-o-stroke:#f4bfab;
+    --bad:#b10e1c;--bad-bg:#fdf3f4;--bad-stroke:#eeacb2;
+    --radius:4px;--radius-lg:8px;
+    --shadow-2:0 0 2px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.14);
+    --shadow-8:0 0 2px rgba(0,0,0,.12),0 4px 8px rgba(0,0,0,.14);
+    --shadow-16:0 0 2px rgba(0,0,0,.12),0 8px 16px rgba(0,0,0,.14);
+    /* legacy aliases (existing markup + inline styles reference these) */
+    --navy:var(--brand); --navy-2:var(--brand-hover); --teal:var(--brand); --teal-2:var(--brand-hover);
+    --ink:var(--fg); --muted:var(--fg-3); --line:var(--stroke); --bg:var(--bg-canvas);
+    --low:var(--ok-bg); --mod:var(--brand-fill); --hi:var(--brand-fill-2); --hi-line:var(--brand);
+    --okbg:var(--ok-bg); --warn:var(--bad); --warnbg:var(--bad-bg);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--font);color:var(--fg);background:var(--bg-canvas);
+    font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 18px 60px}
+  header.app{background:var(--bg-surface);color:var(--fg);padding:16px 0 14px;margin-bottom:16px;
+    border-bottom:1px solid var(--stroke)}
+  header.app .wrap{padding-bottom:0}
+  header.app .head-row{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+  header.app h1{margin:0;font-family:var(--font-display);font-size:22px;font-weight:600;letter-spacing:-.02em;color:var(--fg)}
+  header.app p{margin:4px 0 0;color:var(--fg-3);font-size:12.5px}
+  .tag{display:inline-block;background:var(--brand-fill);color:var(--brand);border:1px solid var(--brand-stroke);
+    border-radius:10px;padding:1px 10px;font-size:11px;font-weight:600;letter-spacing:.04em;margin-left:8px;vertical-align:middle}
+  .who label{display:block;font-size:12px;color:var(--fg-3);font-weight:600;margin-bottom:4px}
+  .who input{padding:7px 10px;border-radius:var(--radius);border:1px solid var(--stroke-2);
+    background:var(--bg-surface);color:var(--fg);font-size:13px;min-width:210px;font-family:inherit}
+
+  /* ---- step nav (Mosaic view-tab style) ---- */
+  .steps{display:flex;gap:2px;margin:0 0 16px;flex-wrap:wrap;background:var(--bg-surface);
+    border:1px solid var(--stroke);border-radius:var(--radius-lg);padding:2px 6px;box-shadow:var(--shadow-2)}
+  .steps button{flex:1 1 0;min-width:200px;position:relative;text-align:left;cursor:pointer;border:none;
+    background:none;padding:10px 12px;display:flex;gap:10px;align-items:center;color:var(--fg-3)}
+  .steps button:hover{color:var(--fg)}
+  .steps button.active{color:var(--brand)}
+  .steps button.active::after{content:"";position:absolute;left:12px;right:12px;bottom:-3px;height:2.5px;
+    border-radius:2px 2px 0 0;background:var(--brand)}
+  .steps .num{flex:none;min-width:22px;height:22px;padding:0 7px;border-radius:11px;background:var(--bg-hover);
+    color:var(--fg-4);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px}
+  .steps button.active .num{background:var(--brand-fill);color:var(--brand)}
+  .steps .st{font-weight:600;font-size:13.5px}
+  .steps .sd{color:var(--fg-4);font-size:11.5px;font-weight:400}
+  .steps button.active .sd{color:var(--brand)}
+
+  .card{background:var(--bg-surface);border:1px solid var(--stroke);border-radius:var(--radius-lg);
+    padding:20px 24px;margin-bottom:16px;box-shadow:var(--shadow-2)}
+  .card h2{margin:0 0 4px;font-family:var(--font-display);font-size:17px;font-weight:600;letter-spacing:-.01em;color:var(--fg)}
+  .card h2 .step-no{color:var(--brand);font-weight:600}
+  .card .sub{color:var(--fg-3);margin:0 0 16px;font-size:13px}
+  h3{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--brand);font-weight:600;
+    margin:22px 0 10px;border-bottom:1px solid var(--stroke);padding-bottom:5px}
+
+  .grid{display:grid;gap:14px}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:720px){.g3,.g2{grid-template-columns:1fr}}
+  label.fld{display:block;font-size:12px;font-weight:600;color:var(--fg-3);margin-bottom:4px}
+  .hint{font-size:11.5px;color:var(--fg-4);font-weight:400}
+  input[type=text],input[type=number],select,textarea{width:100%;padding:7px 10px;border:1px solid var(--stroke-2);
+    border-radius:var(--radius);font-size:13px;font-family:inherit;background:var(--bg-surface);color:var(--fg)}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--brand);outline-offset:-1px;border-color:var(--stroke-2);box-shadow:none}
+  textarea{resize:vertical;min-height:120px;font-family:var(--mono);font-size:12px}
+  .seg{display:flex;align-items:center;background:var(--bg-canvas);border:none;border-radius:6px;padding:2px;gap:2px}
+  .seg button{flex:1;border:none;background:none;height:28px;padding:0 10px;cursor:pointer;font-weight:600;
+    color:var(--fg-3);font-size:12.5px;border-radius:var(--radius);display:flex;align-items:center;justify-content:center;font-family:inherit}
+  .seg button:hover{color:var(--fg)}
+  .seg button.on{background:var(--bg-surface);color:var(--brand);box-shadow:var(--shadow-2)}
+
+  .btn{height:32px;padding:0 13px;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer;
+    font-family:inherit;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--stroke-2);
+    background:var(--bg-surface);color:var(--fg-2);white-space:nowrap}
+  .btn:hover{background:var(--bg-subtle)}
+  .btn.primary,.btn.teal{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn.primary:hover,.btn.teal:hover{background:var(--brand-hover);border-color:var(--brand-hover)}
+  .btn.ghost{background:var(--bg-surface);border:1px solid var(--stroke-2);color:var(--fg-2)}
+  .btn.ghost:hover{background:var(--bg-subtle)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn.sm{height:28px;padding:0 10px;font-size:12.5px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+  table.mus{border-collapse:separate;border-spacing:0;width:100%;margin:6px 0 2px;font-size:13px}
+  table.mus td,table.mus th{border:1px solid var(--stroke);padding:8px 6px;text-align:center}
+  .conf-band{background:var(--bg-subtle);color:var(--fg-3);font-weight:600;font-size:11px;
+    text-transform:uppercase;letter-spacing:.05em;border-radius:var(--radius) var(--radius) 0 0}
+  .conf-head{background:var(--brand-fill);color:var(--brand-hover);font-weight:600}
+  .mat-head{background:var(--brand-fill);color:var(--brand-hover);font-weight:600}
+  .ee-low{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-stroke);font-weight:600}
+  .ee-mod{background:var(--brand-fill);color:var(--brand-hover);border-color:var(--brand-stroke);font-weight:600}
+  .vlabel{writing-mode:vertical-rl;transform:rotate(180deg);background:var(--bg-subtle);color:var(--fg-4);
+    font-weight:600;font-size:11px;letter-spacing:.05em}
+  td.cell{background:var(--bg-surface);color:var(--fg);font-variant-numeric:tabular-nums}
+  td.cell.hot{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:700}
+
+  table.data{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px}
+  table.data th{position:sticky;top:0;z-index:2;background:var(--bg-surface);color:var(--fg-3);font-weight:600;
+    font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;padding:9px 12px;text-align:left;
+    border-bottom:1px solid var(--stroke-2)}
+  table.data td{border-bottom:1px solid var(--stroke);padding:8px 12px;vertical-align:middle}
+  table.data tbody tr:hover td{background:var(--bg-subtle)}
+  table.data td.num,table.data th.num{text-align:right;font-variant-numeric:tabular-nums}
+  table.data td.num{font-family:var(--mono);font-size:12px;color:var(--fg-2)}
+  .scrollx{overflow:auto;max-height:460px;border:1px solid var(--stroke);border-radius:var(--radius-lg)}
+  .key-row td{background:var(--warn-o-bg) !important}
+  .pill{display:inline-block;padding:1px 9px;border-radius:999px;font-size:11.5px;font-weight:600;
+    white-space:nowrap;border:1px solid transparent}
+  .pill.key{background:var(--warn-o-bg);color:var(--warn-o);border-color:var(--warn-o-stroke)}
+  .pill.smp{background:var(--brand-fill);color:var(--brand-hover);border-color:var(--brand-stroke)}
+
+  .stat{background:var(--bg-surface);border:1px solid var(--stroke);border-radius:var(--radius-lg);padding:12px 14px}
+  .stat .k{font-size:11px;color:var(--fg-4);text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin-bottom:3px}
+  .stat .v{font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--fg);font-variant-numeric:tabular-nums}
+  .stat .v.big{font-size:23px}
+  .statgrid{display:grid;gap:12px;grid-template-columns:repeat(4,1fr)}
+  @media(max-width:720px){.statgrid{grid-template-columns:1fr 1fr}}
+  .eqgrid{display:grid;grid-template-columns:1fr 24px 1fr 24px 1fr 28px 1.18fr;gap:6px;align-items:stretch;min-width:780px}
+  .eqgrid .op{display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;color:var(--fg-4)}
+  .eqgrid .stat{display:flex;flex-direction:column;justify-content:center}
+
+  .callout{border-radius:var(--radius-lg);padding:13px 16px;margin:14px 0;border:1px solid;color:var(--fg-2);font-size:13px}
+  .callout.ok{background:var(--ok-bg);border-color:var(--ok-stroke)}
+  .callout.ok .ttl{color:var(--ok)}
+  .callout.warn{background:var(--bad-bg);border-color:var(--bad-stroke)}
+  .callout.warn .ttl{color:var(--bad)}
+  .callout.info{background:var(--brand-fill);border-color:var(--brand-stroke)}
+  .callout.info .ttl{color:var(--brand-press)}
+  .callout .ttl{font-weight:600;font-size:14px;margin-bottom:3px}
+
+  .note{font-size:12.5px;color:var(--fg-3);background:var(--bg-subtle);border:1px solid var(--stroke);
+    padding:8px 12px;border-radius:var(--radius);margin:8px 0}
+  .note b{color:var(--fg-2)}
+  details.method{margin-top:10px}
+  details.method summary{cursor:pointer;font-weight:600;color:var(--brand);font-size:13px}
+  details.method div{font-size:12.5px;color:var(--fg-2);margin-top:8px;line-height:1.6}
+  details.method code{background:var(--bg-canvas);padding:1px 5px;border-radius:var(--radius);
+    font-size:11.5px;font-family:var(--mono)}
+  .err{color:var(--bad);font-size:12.5px;font-weight:600;margin-top:6px}
+  .ftr{text-align:center;color:var(--fg-4);font-size:11.5px;margin-top:26px;line-height:1.6}
+  .inline-edit{width:120px !important;padding:5px 7px !important;text-align:right}
+  .inline-edit.cap{border-color:var(--bad) !important;box-shadow:0 0 0 2px var(--bad-bg)}
+  .miss-pos{color:var(--bad);font-weight:600}
+  .miss-neg{color:var(--ok);font-weight:600}
+  .steps button.doc .num{width:auto;padding:0 8px;border-radius:11px;font-size:11px;letter-spacing:.04em;
+    background:var(--brand-fill);color:var(--brand)}
+  .steps button.doc.active .num{background:var(--brand);color:#fff}
+  .docs p{font-size:13px;color:var(--fg-2);line-height:1.6;margin:6px 0 8px}
+  .docs ul{margin:4px 0 16px;padding-left:20px}
+  .docs li{font-size:13px;color:var(--fg-2);line-height:1.55;margin-bottom:5px}
+  .docs .callout ul{margin:6px 0 0;padding-left:18px}
+  .asa{display:inline-block;background:var(--brand-fill);color:var(--brand-hover);border:1px solid var(--brand-stroke);
+    border-radius:var(--radius);padding:0 6px;font-size:11px;font-weight:600;white-space:nowrap}
+  .docs .rec{margin:2px 0 10px;padding-left:20px}
+  .docs .rec li{margin-bottom:3px}
+  .docs .example{background:var(--bg-subtle);border:1px solid var(--stroke);
+    border-radius:var(--radius-lg);padding:11px 14px;margin:6px 0 20px}
+  .docs .example .lbl{font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--brand);margin-bottom:5px}
+  .docs .example p{margin:3px 0;font-size:12.5px;color:var(--fg-2)}
+  .docs .example .concl{margin-top:7px;padding-top:7px;border-top:1px dashed var(--stroke-2);font-weight:600;color:var(--ok)}
+  .wp{background:var(--bg-subtle);border:1px solid var(--stroke);border-radius:var(--radius-lg);
+    padding:12px 16px;margin:6px 0 2px;font-size:12.5px;color:var(--fg-2);line-height:1.6}
+  .wp .lbl{font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--brand);margin-bottom:6px}
+  .wp p{margin:4px 0}
+  .wp b{color:var(--fg)}
+  .wp .muted{color:var(--fg-3)}
+  .wp .ref{color:var(--fg-4);font-size:11.5px;margin-top:8px}
+  /* keyboard focus visibility (accessibility) */
+  button:focus-visible,a:focus-visible,summary:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{
+    outline:2px solid var(--brand);outline-offset:1px;border-radius:var(--radius)}
+  .steps button:focus-visible{outline-offset:-2px}
+  /* step completion tick in the nav */
+  .steps .done{margin-left:auto;color:var(--ok);font-weight:700;font-size:15px;line-height:1}
+  /* compact save bar */
+  .savebar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--bg-subtle);
+    border:1px solid var(--stroke);border-radius:var(--radius-lg);padding:12px 14px}
+  .linklike{cursor:pointer;color:var(--brand);font-weight:600}
+  .linklike:hover{text-decoration:underline}
+  /* "?" explainer chip */
+  .qm{display:inline-flex;width:14px;height:14px;border-radius:50%;background:var(--bg-hover);color:var(--fg-4);
+    font-size:10px;font-weight:700;align-items:center;justify-content:center;margin-left:5px;cursor:help;vertical-align:middle}
+  /* data-preview column highlights */
+  table.data th.hl-amt,table.data td.hl-amt{background:var(--brand-fill) !important;color:var(--brand-press)}
+  table.data th.hl-ref,table.data td.hl-ref{background:var(--bg-hover) !important}
+  /* status pills */
+  .pill.st-ok{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-stroke)}
+  .pill.st-bad{background:var(--bad-bg);color:var(--bad);border-color:var(--bad-stroke)}
+  .pill.st-mut{background:var(--bg-hover);color:var(--fg-3)}
+  .pill.st-wo{background:var(--warn-o-bg);color:var(--warn-o);border-color:var(--warn-o-stroke)}
+  .pill.st-info{background:var(--brand-fill);color:var(--brand-hover);border-color:var(--brand-stroke)}
+  /* tiny row-action buttons */
+  .rbtn{height:22px;padding:0 7px;border-radius:var(--radius);border:1px solid var(--stroke-2);background:var(--bg-surface);
+    color:var(--fg-3);font-size:11px;font-weight:600;cursor:pointer}
+  .rbtn:hover{background:var(--bg-subtle);color:var(--fg)}
+  .rbtn.on{background:var(--warn-o-bg);border-color:var(--warn-o-stroke);color:var(--warn-o)}
+  .rbtn.anom.on{background:var(--brand-fill);border-color:var(--brand-stroke);color:var(--brand-hover)}
+  .rbtn.confirm{border-color:var(--bad-stroke);color:var(--bad)}
+  .rbtn.confirm:hover{background:var(--bad-bg)}
+  /* dialogs */
+  .scrim{position:fixed;inset:0;background:rgba(15,23,42,.32);z-index:40}
+  .dlg{position:fixed;z-index:50;top:14%;left:50%;transform:translateX(-50%);width:min(560px,94vw);
+    background:var(--bg-surface);border:1px solid var(--stroke);border-radius:var(--radius-lg);box-shadow:var(--shadow-16)}
+  .dlg .d-h{padding:14px 18px;font-weight:600;font-family:var(--font-display);font-size:15px;border-bottom:1px solid var(--stroke)}
+  .dlg .d-b{padding:14px 18px;font-size:13px;color:var(--fg-2);max-height:56vh;overflow:auto}
+  .dlg .d-f{padding:12px 18px;border-top:1px solid var(--stroke);display:flex;gap:8px;justify-content:flex-end}
+  .btn.danger{color:var(--bad);border-color:var(--bad-stroke)}
+  .btn.danger:hover{background:var(--bad-bg)}
+  /* verdict banner */
+  .banner{display:flex;align-items:center;gap:12px;border-radius:var(--radius-lg);padding:11px 16px;margin:0 0 14px;
+    border:1px solid;font-size:13.5px}
+  .banner.ok{background:var(--ok-bg);border-color:var(--ok-stroke)}
+  .banner.warn{background:var(--bad-bg);border-color:var(--bad-stroke)}
+  .banner.hold{background:var(--brand-fill);border-color:var(--brand-stroke)}
+  .banner .b-t{font-weight:700}
+  .banner.ok .b-t{color:var(--ok)} .banner.warn .b-t{color:var(--bad)} .banner.hold .b-t{color:var(--brand-press)}
+  /* print working paper */
+  @media print{
+    header.app,.steps,.ftr,.btn,.rbtn,.savebar,.dlg,.scrim,.seg,.no-print,textarea{display:none !important}
+    body{background:#fff}
+    .card{box-shadow:none;border:none;padding:0;margin:0 0 14px}
+    .scrollx{max-height:none;overflow:visible;border:1px solid var(--stroke)}
+    .wrap{max-width:none;padding:0}
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/app-jsx" id="app-code">
+const {useState,useEffect,useMemo,useRef} = React;
+
+// Tool version — stamped on every export and working paper so a reperformer
+// knows which selection/evaluation rules produced a result.
+const TOOL_VERSION = "2.4 (08/07/2026)";
+const SESSION_KEY  = "mus_session_v1";
+
+/* ============================================================
+   MUS sample-size lookup tables (from VAGO DST guidance)
+   rows = materiality %, cols = confidence %
+   ============================================================ */
+const CONF_LEVELS = [65,70,75,80,85,90,95];
+const MAT_LEVELS  = [10,5,3,1];
+const SAMPLE_TABLES = {
+  Low: {
+    65:{10:12,5:24,3:40,1:120}, 70:{10:14,5:28,3:47,1:139},
+    75:{10:17,5:33,3:54,1:161}, 80:{10:19,5:38,3:63,1:189},
+    85:{10:23,5:45,3:75,1:225}, 90:{10:28,5:56,3:93,1:277},
+    95:{10:37,5:74,3:123,1:368},
+  },
+  Moderate: {
+    65:{10:17,5:33,3:55,1:163}, 70:{10:20,5:39,3:65,1:193},
+    75:{10:23,5:46,3:77,1:230}, 80:{10:28,5:56,3:93,1:277},
+    85:{10:35,5:69,3:114,1:341}, 90:{10:44,5:87,3:145,1:433},
+    95:{10:60,5:120,3:200,1:600},
+  }
+};
+
+/* ============================================================
+   Numerical core — Poisson reliability factors via the inverse
+   regularised lower incomplete gamma function.
+   RF(k, conf) = gammaPInv(k+1, conf)   (k = # overstatement errors)
+   ============================================================ */
+function logGamma(x){
+  const c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,
+    771.32342877765313,-176.61502916214059,12.507343278686905,
+    -0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if(x<0.5) return Math.log(Math.PI/Math.sin(Math.PI*x))-logGamma(1-x);
+  x-=1; let a=c[0]; const t=x+7.5;
+  for(let i=1;i<9;i++) a+=c[i]/(x+i);
+  return 0.5*Math.log(2*Math.PI)+(x+0.5)*Math.log(t)-t+Math.log(a);
+}
+// regularised lower incomplete gamma P(a,x)
+function gammaP(a,x){
+  if(x<=0||a<=0) return 0;
+  if(x<a+1){ // series
+    let ap=a,sum=1/a,del=sum;
+    for(let n=0;n<1000;n++){ ap+=1; del*=x/ap; sum+=del;
+      if(Math.abs(del)<Math.abs(sum)*1e-15) break; }
+    return sum*Math.exp(-x+a*Math.log(x)-logGamma(a));
+  } else { // continued fraction for Q=1-P
+    const tiny=1e-300; let b=x+1-a,c=1/tiny,d=1/b,h=d;
+    for(let i=1;i<=1000;i++){ const an=-i*(i-a); b+=2;
+      d=an*d+b; if(Math.abs(d)<tiny)d=tiny;
+      c=b+an/c; if(Math.abs(c)<tiny)c=tiny;
+      d=1/d; const del=d*c; h*=del;
+      if(Math.abs(del-1)<1e-15) break; }
+    return 1-Math.exp(-x+a*Math.log(x)-logGamma(a))*h;
+  }
+}
+// inverse: find x such that gammaP(a,x)=p  (bisection — robust)
+function gammaPInv(a,p){
+  if(p<=0) return 0; if(p>=1) return Infinity;
+  let lo=0,hi=Math.max(a*2,10);
+  let guard=0;
+  while(gammaP(a,hi)<p && guard++<60) hi*=2;
+  for(let i=0;i<200;i++){ const mid=(lo+hi)/2;
+    if(gammaP(a,mid)<p) lo=mid; else hi=mid; }
+  return (lo+hi)/2;
+}
+// confidence as a fraction (0.95). errors k>=0.
+// Round UP to 2 decimals to match published audit reliability-factor tables
+// (the standard convention — conservative, never understates the bound).
+function reliabilityFactor(confFrac,k){ return Math.ceil(gammaPInv(k+1,confFrac)*100 - 1e-9)/100; }
+
+/* ============================================================
+   Helpers
+   ============================================================ */
+const money = (n)=> (n==null||isNaN(n)||!isFinite(n)) ? '—'
+  : (n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-AU',{minimumFractionDigits:2,maximumFractionDigits:2});
+const num0 = (n)=> (n==null||isNaN(n)) ? '—' : Math.round(n).toLocaleString('en-AU');
+const pct = (n)=> (n==null||isNaN(n)) ? '—' : (n*100).toFixed(1)+'%';
+
+function parseAmount(s){
+  if(typeof s==='number') return isFinite(s)?s:NaN;
+  if(s==null) return NaN;
+  let t=String(s).trim(); if(t==='') return NaN;
+  let neg=false;
+  if(/^\(.*\)$/.test(t)){ neg=true; t=t.slice(1,-1).trim(); }   // accounting negatives
+  t=t.replace(/[\s,$£€¥]/g,'');                                  // strip spaces, thousands, currency
+  if(/^-/.test(t)){ neg=true; t=t.slice(1); }                   // only a LEADING minus is negative
+  if(!/^\d*\.?\d+$/.test(t)) return NaN;                         // must be a clean number now (rejects e.g. INV-1001)
+  let v=parseFloat(t);
+  return isNaN(v)?NaN:(neg?-v:v);
+}
+function parseDelimited(text){
+  const firstLine=(text.split(/\r?\n/)[0]||'');
+  const delim=(firstLine.split('\t').length>firstLine.split(',').length)?'\t':',';
+  const rows=[]; let row=[],field='',inQ=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(inQ){
+      if(ch==='"'){ if(text[i+1]==='"'){field+='"';i++;} else inQ=false; }
+      else field+=ch;
+    } else {
+      if(ch==='"') inQ=true;
+      else if(ch===delim){ row.push(field); field=''; }
+      else if(ch==='\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else if(ch==='\r'){}
+      else field+=ch;
+    }
+  }
+  if(field.length>0||row.length>0){ row.push(field); rows.push(row); }
+  return rows.filter(r=>!(r.length===1&&r[0].trim()===''));
+}
+function toCSV(rows){
+  return rows.map(r=>r.map(c=>{
+    const s=c==null?'':String(c);
+    return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+  }).join(',')).join('\n');
+}
+function triggerDownload(filename, blob){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+function downloadCSV(filename,rows){ triggerDownload(filename, new Blob([toCSV(rows)],{type:'text/csv;charset=utf-8;'})); }
+function downloadJSON(filename,obj){ triggerDownload(filename, new Blob([JSON.stringify(obj,null,2)],{type:'application/json'})); }
+function safeFileName(s){ return String(s||'sample').replace(/[^a-z0-9_\- ]+/gi,'_').trim()||'sample'; }
+// Save text to a user-chosen location via the File System Access API where available
+// (served over http/https); otherwise fall back to a normal download. Async.
+async function saveTextFile(filename, text, mime, ext, desc){
+  if(window.showSaveFilePicker){
+    try{
+      const handle=await window.showSaveFilePicker({ suggestedName:filename,
+        types:[{ description:desc||'File', accept:{ [mime]:[ext] } }] });
+      const w=await handle.createWritable();
+      await w.write(text); await w.close();
+      return {ok:true, picked:true};
+    }catch(e){
+      if(e && e.name==='AbortError') return {ok:false, cancelled:true};
+      // otherwise (e.g. blocked on file://) fall through to a normal download
+    }
+  }
+  triggerDownload(filename, new Blob([text],{type:mime+';charset=utf-8;'}));
+  return {ok:true, picked:false};
+}
+
+/* Population fingerprint — proves "same file" on reperformance.
+   SHA-256 where available (localhost/https); FNV-1a fallback elsewhere. */
+async function computeFingerprint(text){
+  try{
+    if(window.crypto && crypto.subtle){
+      const buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+      return {algo:'SHA-256', hash:[...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('')};
+    }
+  }catch(e){}
+  let h=0x811c9dc5>>>0;
+  for(let i=0;i<text.length;i++){ h^=text.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; }
+  return {algo:'FNV-1a-32', hash:h.toString(16).padStart(8,'0')};
+}
+const fpShort=(fp)=> fp? fp.hash.slice(0,12)+(fp.hash.length>12?'…':'') : '—';
+const fpLine =(fp)=> fp? fp.algo+' '+fp.hash+' · '+num0(fp.rows)+' rows · '+money(fp.total) : 'not computed';
+
+/* ---- saved-sample persistence (browser localStorage) ---- */
+const SAVE_KEY='mus_saved_samples_v1';
+const MAX_SAVED=3;   // list keeps the 3 most recent; older ones drop off (a CSV copy is saved on every save)
+function loadSavedSamples(){
+  try{ const r=window.localStorage.getItem(SAVE_KEY); const a=r?JSON.parse(r):[]; return Array.isArray(a)?a:[]; }
+  catch(e){ return []; }
+}
+function writeSavedSamples(list){
+  try{ window.localStorage.setItem(SAVE_KEY,JSON.stringify(list)); return true; }catch(e){ return false; }
+}
+function makeId(){ return 's_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7); }
+function pad2(n){ return String(n).padStart(2,'0'); }
+// date + time stamp as ddmmyy_HHMM
+function stamp(){ const d=new Date();
+  return pad2(d.getDate())+pad2(d.getMonth()+1)+String(d.getFullYear()).slice(-2)+'_'+pad2(d.getHours())+pad2(d.getMinutes()); }
+function cleanUser(u){ return (String(u||'').trim().replace(/[^a-z0-9_-]+/gi,'')||'auditor').slice(0,40); }
+// default file/sample name: username_ddmmyy_HHMM_positive|negative
+function baseName(username,basis){ return cleanUser(username)+'_'+stamp()+'_'+(basis==='negative'?'negative':'positive'); }
+
+// build CSV rows for a saved sample record (metadata + selected items, incl. any audited values)
+function sampleRecToCSV(rec){
+  const neg = rec.sampleBasis==='negative';
+  const ex = rec.exclusions||{};
+  const rows=[
+    ["Monetary Unit Sampling — saved sample"],
+    ["Tool version", rec.toolVersion||TOOL_VERSION],
+    ["Name", rec.name||""],
+    ["Performed by", rec.performedBy||""],
+    ["Selection run at", rec.runAt? new Date(rec.runAt).toLocaleString('en-AU') : ""],
+    ["Saved at", rec.savedAt? new Date(rec.savedAt).toLocaleString('en-AU') : ""],
+    ["Sample basis", neg?"Negative values":"Positive values"],
+    ["Amount column", rec.amountColName||""],
+    ["Reference column", rec.refColName||""],
+    ["First row is header", rec.hasHeader===false?"No":"Yes"],
+    ["Sorted by reference before selection", rec.sortedByRef?"Yes":"No (file order)"],
+    ["Excluded - totals/subtotal rows", ex.totals!=null?ex.totals:""],
+    ["Excluded - wrong sign / zero", ex.wrongSign!=null?ex.wrongSign:""],
+    ["Excluded - unparsed rows", ex.unparsed!=null?ex.unparsed:""],
+    ["Population fingerprint", rec.fingerprint? (rec.fingerprint.algo+" "+rec.fingerprint.hash) : ""],
+    ["Expected error", (rec.ee||"")+" EE$"],["Confidence", (rec.confidence||"")+"%"],
+    ["Materiality", (rec.materiality||"")+"%"],["Population items", rec.popCount!=null?rec.popCount:""],
+    ["Population value (absolute)", (rec.total||0).toFixed(2)],["Planned sample size", rec.sampleSize!=null?rec.sampleSize:""],
+    ["Sampling interval", (rec.interval||0).toFixed(2)],["Random start", (rec.randomStart||0).toFixed(2)],
+    ["Items selected", (rec.items||[]).length],[""],
+    neg ? ["Reference","Amount (absolute)","Original (signed) amount","Type","Audited value","Status","Anomaly justification"]
+        : ["Reference","Book value","Type","Audited value","Status","Anomaly justification"]
+  ];
+  const un=rec.unable||{}, an=rec.anomaly||{};
+  (rec.items||[]).forEach(it=>{
+    const a = rec.audited && rec.audited[it.origIndex];
+    const aud = (a!=null && String(a).trim()!=='') ? a : "";
+    const status = un[it.origIndex] ? "Unable to test" : an[it.origIndex] ? "Anomaly" : (aud!==""?"Tested":"Not yet tested");
+    const just = an[it.origIndex] ? (an[it.origIndex].just||"") : "";
+    rows.push(neg
+      ? [it.ref, it.amount.toFixed(2), (it.signed!=null?it.signed.toFixed(2):''), it.isKey?"Key item":"Sample item", aud, status, just]
+      : [it.ref, it.amount.toFixed(2), it.isKey?"Key item":"Sample item", aud, status, just]);
+  });
+  return rows;
+}
+
+// parse a CSV produced by sampleRecToCSV back into a saved-sample record
+function csvToSampleRec(text){
+  const rows=parseDelimited(text); if(!rows.length) return null;
+  const meta={}; let h=-1;
+  for(let i=0;i<rows.length;i++){
+    if((rows[i][0]||'')==='Reference'){ h=i; break; }
+    if(rows[i].length>=2) meta[rows[i][0]]=rows[i][1];
+  }
+  if(h<0) return null;
+  const neg=String(meta['Sample basis']||'').toLowerCase().includes('negative');
+  const header=rows[h].map(c=>String(c).toLowerCase());
+  const find=(t,dflt)=>{ const i=header.findIndex(c=>c.includes(t)); return i>=0?i:dflt; };
+  const iAmt=find('absolute', find('book value',1));
+  const iSigned=find('signed',-1), iType=find('type', neg?3:2), iAud=find('audited',-1);
+  const iStatus=find('status',-1), iJust=find('justification',-1);
+  const numv=s=>{ const v=parseFloat(String(s==null?'':s).replace(/[^0-9.\-]/g,'')); return isNaN(v)?0:v; };
+  const items=[]; const audited={}; const unable={}; const anomaly={};
+  for(let i=h+1;i<rows.length;i++){
+    const r=rows[i]; if(!r||(r[0]||'').toString().trim()==='') continue;
+    const amount=numv(r[iAmt]); if(!amount) continue;
+    const oi=items.length;
+    const signed = neg ? (iSigned>=0?numv(r[iSigned]):-amount) : amount;
+    items.push({ref:(r[0]||'').toString(), amount, signed, origIndex:oi,
+      isKey:/key/i.test(r[iType]||''), nHits:1, cumStart:0, cumEnd:0});
+    const a=iAud>=0?r[iAud]:null; if(a!=null && String(a).trim()!=='') audited[oi]=String(a).trim();
+    const stv=iStatus>=0? String(r[iStatus]||'').toLowerCase() : '';
+    if(stv.includes('unable')) unable[oi]=true;
+    if(stv.includes('anomaly')) anomaly[oi]={just: iJust>=0? String(r[iJust]||'') : '', by:'', at:''};
+  }
+  if(!items.length) return null;
+  const fpRaw=String(meta['Population fingerprint']||'').trim();
+  const fpm=fpRaw? fpRaw.match(/^(\S+)\s+(\S+)$/):null;
+  return {
+    name: meta['Name']||'Imported sample', performedBy: meta['Performed by']||'',
+    toolVersion: meta['Tool version']||'', runAt:'',
+    sampleBasis: neg?'negative':'positive',
+    amountColName: meta['Amount column']||'', refColName: meta['Reference column']||'',
+    hasHeader: String(meta['First row is header']||'Yes').toLowerCase()!=='no',
+    sortedByRef: String(meta['Sorted by reference before selection']||'').toLowerCase().startsWith('y'),
+    exclusions:{ totals:numv(meta['Excluded - totals/subtotal rows']),
+      wrongSign:numv(meta['Excluded - wrong sign / zero']), unparsed:numv(meta['Excluded - unparsed rows']) },
+    fingerprint: fpm? {algo:fpm[1], hash:fpm[2]} : null,
+    ee: (String(meta['Expected error']||'Low').trim().split(/\s+/)[0])||'Low',
+    confidence: numv(meta['Confidence'])||95, materiality: numv(meta['Materiality'])||5,
+    popCount: numv(meta['Population items']), total: numv(meta['Population value (absolute)']),
+    sampleSize: numv(meta['Planned sample size']), interval: numv(meta['Sampling interval']),
+    randomStart: numv(meta['Random start']), materialityDollar:'', items, audited, unable, anomaly
+  };
+}
+
+// parse a downloaded evaluation CSV (from "Download evaluation") back into a
+// loadable record. Column detection also tolerates a saved-sample CSV.
+function csvToEvalRec(text){
+  const rows=parseDelimited(text); if(!rows.length) return null;
+  const meta={}; let h=-1;
+  for(let i=0;i<rows.length;i++){
+    if((rows[i][0]||'')==='Reference'){ h=i; break; }
+    if(rows[i].length>=2) meta[rows[i][0]]=rows[i][1];
+  }
+  if(h<0) return null;
+  const header=rows[h].map(c=>String(c).toLowerCase());
+  const find=(t,dflt)=>{ const i=header.findIndex(c=>c.includes(t)); return i>=0?i:dflt; };
+  const iBook=find('book value', find('amount', 1)), iAud=find('audited', 2), iType=find('type', header.length-1);
+  const iStatus=find('status',-1), iJust=find('justification',-1);
+  const numv=s=>{ const v=parseFloat(String(s==null?'':s).replace(/[^0-9.\-]/g,'')); return isNaN(v)?0:v; };
+  const neg=String(meta['Sample basis']||'').toLowerCase().includes('negative');
+  const items=[]; const audited={}; const unable={}; const anomaly={};
+  for(let i=h+1;i<rows.length;i++){
+    const r=rows[i]; if(!r||(r[0]||'').toString().trim()==='') continue;
+    if(/^workings/i.test(String(r[0]))) break;   // items always precede the workings section — stop here
+    const book=numv(r[iBook]); if(!book) continue;
+    const oi=items.length;
+    items.push({ref:(r[0]||'').toString(), amount:book, signed:neg?-book:book, origIndex:oi,
+      isKey:/key/i.test(r[iType]||''), nHits:1, cumStart:0, cumEnd:0});
+    const a=r[iAud]; if(a!=null && String(a).trim()!=='') audited[oi]=String(a).trim();
+    const stv=iStatus>=0? String(r[iStatus]||'').toLowerCase() : '';
+    if(stv.includes('unable')) unable[oi]=true;
+    if(stv.includes('anomaly')) anomaly[oi]={just: iJust>=0? String(r[iJust]||'') : '', by:'', at:''};
+  }
+  if(!items.length) return null;
+  const total=items.reduce((s,x)=>s+x.amount,0);
+  const matDollar=numv(meta['Tolerable misstatement / materiality']);
+  return {
+    items, audited, unable, anomaly, total, sampleBasis: neg?'negative':'positive',
+    interval: numv(meta['Sampling interval']), randomStart: numv(meta['Random start']),
+    confidence: numv(meta['Confidence'])||95,
+    materialityDollar: matDollar? matDollar.toFixed(2):'',
+    materiality: (total>0 && matDollar)? +(matDollar/total*100).toFixed(2) : 5
+  };
+}
+
+/* ============================================================
+   MUS selection — TWO-STRATUM
+   1) every item >= the sampling interval is a CERTAINTY ("key") item:
+      examined in full and counted ONCE (never selected more than once);
+   2) the remaining sub-interval population is selected by systematic
+      probability-proportional-to-size MUS at the interval.
+   items: [{ref, amount(>0), signed, origIndex}]
+   ============================================================ */
+function runSelection(items, interval, randomStart){
+  const eps=1e-6;
+  const sel=[];
+  let nextHit=randomStart, rcum=0;
+  for(const it of items){
+    if(it.amount>=interval-eps){
+      sel.push({...it, isKey:true, nHits:1});                  // certainty item, once
+    } else {
+      rcum+=it.amount;                                         // residual cumulative
+      let hit=false;
+      while(nextHit<=rcum+eps){ hit=true; nextHit+=interval; } // item < interval => <=1 hit
+      if(hit) sel.push({...it, isKey:false, nHits:1});
+    }
+  }
+  sel.sort((a,b)=>a.origIndex-b.origIndex);
+  // population running cumulative, for display only
+  const cum={}; let c=0;
+  for(const it of items){ c+=it.amount; cum[it.origIndex]=c; }
+  for(const r of sel) r.cumEnd=cum[r.origIndex];
+  return sel;
+}
+
+/* Derive the residual sampling interval so the two-stratum sample yields ~n
+   DISTINCT items: certainty items (>= interval) are removed and the interval is
+   recomputed over the remainder until the certainty set is stable. Because the
+   recomputed interval is smaller, items below the original P/n interval but above
+   the recomputed one also become certainties. */
+function residualInterval(items, n){
+  const eps=1e-6;
+  const P=items.reduce((s,x)=>s+x.amount,0);
+  if(P<=0||n<1) return 0;
+  let interval=P/n, prevKc=-1;
+  for(let g=0; g<items.length+10; g++){
+    let kt=0,kc=0;
+    for(const it of items){ if(it.amount>=interval-eps){ kt+=it.amount; kc++; } }
+    const rN=n-kc;
+    if(rN<=0) return P/n;                  // more certainty items than n: fall back
+    const ni=(P-kt)/rN;
+    if(kc===prevKc || Math.abs(ni-interval)<eps) return ni;
+    prevKc=kc; interval=ni;
+  }
+  return interval;
+}
+
+/* ============================================================
+   Evaluation — projection of misstatements (Stringer bound)
+
+   Per-item status model (ASA 530 paras 10–13):
+   · tested    — audited value entered (and any >100% tainting confirmed)
+   · pending   — entered value implies >100% tainting, awaiting confirmation
+   · unable    — could not be tested → treated as FULLY misstated (para 11)
+   · untested  — no value yet → contributes nothing; conclusion is withheld
+   Key items use their ACTUAL misstatement uncapped (100% examined — no
+   projection). Sampled taints are capped at ±100% for the Stringer maths only;
+   any excess over book is reported separately. Anomalies (para 13) are
+   excluded from the projection but their actual error still counts.
+   ============================================================ */
+function evaluateSample(selected, auditedMap, interval, confFrac, opts){
+  const o=opts||{}; const unable=o.unable||{}, anomalyMap=o.anomaly||{}, confirmed=o.confirmedOver||{};
+  const eps=1e-9;
+  const rf=(k)=>reliabilityFactor(confFrac,k);
+  let keyOver=0, keyUnder=0, nCapped=0, excessOver=0, excessUnder=0;
+  const overList=[], underList=[];          // {taint, ref} — sampled, non-anomaly
+  const anomalies=[];                        // excluded from projection
+  let altKeyOver=0; const altOverExtra=[];   // "as representative" add-backs for anomalies
+  const rows=selected.map(it=>{
+    const book=it.amount;
+    const raw=auditedMap[it.origIndex];
+    const hasAud = raw!=null && String(raw).trim()!=='' && !isNaN(parseFloat(raw));
+    const audited= hasAud ? parseFloat(raw) : null;
+    const isUnable=!!unable[it.origIndex];
+    let misst   = hasAud ? (book-audited) : 0;           // actual book − audited (+ve = overstatement)
+    let rawTaint= (hasAud && book!==0) ? misst/book : 0;
+    if(isUnable){ misst=book; rawTaint=1; }              // ASA 530.11 — unable to test = fully misstated
+    const overCap = !isUnable && hasAud && Math.abs(rawTaint) > 1+eps;
+    const needsConfirm = overCap && !confirmed[it.origIndex];
+    const status = isUnable?'unable' : !hasAud?'untested' : needsConfirm?'pending' : 'tested';
+    const isAnomaly = status==='tested' && !!anomalyMap[it.origIndex] && Math.abs(misst)>1e-6;
+    const taint = Math.max(-1, Math.min(1, rawTaint));   // Stringer needs taints in [-1,1]
+    if(status==='tested' && overCap) nCapped++;
+    let projected=0;
+    if(status==='tested' || status==='unable'){
+      if(isAnomaly){
+        projected=misst;                                  // actual error still counts — just not projected
+        anomalies.push({ref:it.ref, misst, taint, isKey:!!it.isKey,
+          just:(anomalyMap[it.origIndex]||{}).just||'', by:(anomalyMap[it.origIndex]||{}).by||'',
+          at:(anomalyMap[it.origIndex]||{}).at||''});
+        if(it.isKey){ if(misst>0) altKeyOver+=misst; }
+        else if(taint>0) altOverExtra.push(taint);
+      } else if(it.isKey){
+        projected=misst;                                  // 100% examined — actual, UNCAPPED
+        if(misst>0) keyOver+=misst; else if(misst<0) keyUnder+=(-misst);
+      } else {
+        projected=taint*interval;
+        if(taint>0) overList.push({taint, ref:it.ref});
+        else if(taint<0) underList.push({taint:-taint, ref:it.ref});
+        if(overCap){ if(rawTaint>0) excessOver+=(misst-book); else excessUnder+=((-misst)-book); }
+      }
+    }
+    return {...it, book, audited, hasAud, misst, taint, rawTaint,
+      capped:overCap, status, isAnomaly, projected};
+  });
+  overList.sort((a,b)=>b.taint-a.taint); underList.sort((a,b)=>b.taint-a.taint);
+  const overTaints=overList.map(x=>x.taint), underTaints=underList.map(x=>x.taint);
+  const RF0=rf(0);
+  const basicPrecision=RF0*interval;
+  const mleOver = overTaints.reduce((s,t)=>s+t*interval,0)+keyOver;
+  const mleUnder= underTaints.reduce((s,t)=>s+t*interval,0)+keyUnder;
+  let umlSum=RF0;
+  const overSchedule=overList.map((x,i)=>{ const inc=rf(i+1)-rf(i); umlSum+=x.taint*inc;
+    return {rank:i+1, ref:x.ref, taint:x.taint, rfFrom:rf(i), rfTo:rf(i+1), inc, contribution:x.taint*inc*interval}; });
+  const uml=umlSum*interval+keyOver;
+  let llSum=RF0;
+  const underSchedule=underList.map((x,i)=>{ const inc=rf(i+1)-rf(i); llSum+=x.taint*inc;
+    return {rank:i+1, ref:x.ref, taint:x.taint, rfFrom:rf(i), rfTo:rf(i+1), inc, contribution:x.taint*inc*interval}; });
+  const lowerLimit=llSum*interval+keyUnder;
+  // "anomalies as representative" alternative UML (shown so the judgement is visible)
+  let umlIncl=uml;
+  if(anomalies.length){
+    const allOver=overTaints.concat(altOverExtra).sort((a,b)=>b-a);
+    let s2=RF0; for(let i=0;i<allOver.length;i++) s2+=allOver[i]*(rf(i+1)-rf(i));
+    umlIncl=s2*interval+keyOver+altKeyOver;
+  }
+  const counts={ untested:rows.filter(r=>r.status==='untested').length,
+    pending:rows.filter(r=>r.status==='pending').length,
+    unable:rows.filter(r=>r.status==='unable').length,
+    tested:rows.filter(r=>r.status==='tested').length };
+  const anomalyMLE=anomalies.reduce((s,a)=>s+a.misst,0);
+  return {rows, basicPrecision, mleOver, mleUnder, netMLE:mleOver-mleUnder,
+    uml, umlIncl, lowerLimit, allowance:uml-mleOver, RF0, nCapped, excessOver, excessUnder,
+    keyOver, keyUnder, anomalies, anomalyMLE, overSchedule, underSchedule,
+    rfList:Array.from({length:overTaints.length+1},(_,k)=>rf(k)),
+    nOver:overTaints.length, nUnder:underTaints.length,
+    nKey:selected.filter(s=>s.isKey).length,
+    nTested:counts.tested+counts.unable, counts,
+    ready: counts.untested===0 && counts.pending===0};
+}
+
+// expose for verification
+window.__MUS={reliabilityFactor,gammaP,gammaPInv,runSelection,residualInterval,evaluateSample,parseAmount,
+  sampleRecToCSV,csvToSampleRec,csvToEvalRec,toCSV};
+
+/* ============================================================
+   UI components
+   ============================================================ */
+function LookupTable({eeKey,label,accent,selConf,selMat}){
+  const data=SAMPLE_TABLES[eeKey];
+  return (
+    <table className="mus">
+      <tbody>
+        <tr><td className="vlabel" rowSpan={6} style={{width:26}}></td>
+          <td></td>
+          <td className="conf-band" colSpan={CONF_LEVELS.length}>Confidence&nbsp;%</td></tr>
+        <tr>
+          <td className={accent}>{label}</td>
+          {CONF_LEVELS.map(c=>(
+            <td key={c} className="conf-head">{c}%</td>))}
+        </tr>
+        {MAT_LEVELS.map(m=>(
+          <tr key={m}>
+            <td className="mat-head">{m}%</td>
+            {CONF_LEVELS.map(c=>{
+              const hot=(selConf===c&&selMat===m);
+              return <td key={c} className={"cell"+(hot?" hot":"")}>{data[c][m]}</td>;
+            })}
+          </tr>
+        ))}
+        <tr><td colSpan={CONF_LEVELS.length+1} style={{border:'none',padding:'2px'}}></td></tr>
+      </tbody>
+    </table>
+  );
+}
+// vertical "Materiality" caption is faked via first column label rows; keep simple caption below
+function TableBlock({eeKey,label,accent,selConf,selMat,active}){
+  return (
+    <div>
+      <div style={{display:'flex',alignItems:'center',gap:8,margin:'4px 0'}}>
+        <span className={accent} style={{padding:'3px 9px',borderRadius:5}}>{label}</span>
+        <span style={{fontSize:11,color:'var(--muted)'}}>rows = materiality · columns = confidence · highlighted = your sample size</span>
+      </div>
+      <LookupTable eeKey={eeKey} label={label} accent={accent} selConf={selConf} selMat={selMat}/>
+    </div>
+  );
+}
+
+function Stat({k,v,big,tone,title,onClick,style}){
+  const base = onClick?{cursor:'pointer'}:(title?{cursor:'help'}:undefined);
+  return <div className="stat" title={title} onClick={onClick}
+    style={{...base, ...style}}><div className="k">{k}</div>
+    <div className={"v"+(big?" big":"")} style={tone?{color:tone}:{}}>{v}</div></div>;
+}
+// "?" explainer chip
+function Q({t}){ return <span className="qm" title={t} aria-label={t} role="img">?</span>; }
+// generic modal dialog
+function Dlg({title,children,foot,onClose,wide}){
+  return (<>
+    <div className="scrim" onClick={onClose}/>
+    <div className="dlg" role="dialog" aria-label={title} style={wide?{width:'min(760px,94vw)'}:undefined}>
+      <div className="d-h">{title}</div>
+      <div className="d-b">{children}</div>
+      {foot && <div className="d-f">{foot}</div>}
+    </div>
+  </>);
+}
+function ConfirmDlg({title,body,confirmLabel,onConfirm,onCancel}){
+  return <Dlg title={title} onClose={onCancel}
+    foot={<><button className="btn sm" onClick={onCancel}>Cancel</button>
+      <button className="btn danger sm" onClick={onConfirm}>{confirmLabel||'Delete'}</button></>}>
+    {body}
+  </Dlg>;
+}
+// text input that shows thousands separators when not focused; state stays raw
+function fmtDisp(v){ const s=String(v==null?'':v); if(s.trim()==='') return s;
+  const n=parseFloat(s.replace(/,/g,'')); if(!isFinite(n)) return s;
+  return n.toLocaleString('en-AU',{maximumFractionDigits:2}); }
+function NumText({value,onChange,disabled,placeholder,style,ariaLabel}){
+  const [focus,setFocus]=useState(false);
+  return <input type="text" inputMode="decimal" aria-label={ariaLabel} placeholder={placeholder}
+    value={focus? (value??'') : fmtDisp(value)} disabled={disabled} style={style}
+    onFocus={()=>setFocus(true)} onBlur={()=>setFocus(false)}
+    onChange={e=>onChange(e.target.value.replace(/,/g,''))}/>;
+}
+
+/* ---------------- Step 1: Sample size ---------------- */
+function StepSize({S}){
+  const table=SAMPLE_TABLES[S.ee][S.confidence][S.materiality];
+  return (
+    <div className="card">
+      <h2><span className="step-no">Step 1.</span> Estimate the sample size</h2>
+      <p className="sub">Choose three parameters — the sample size comes from the DST table below.</p>
+
+      <div className="grid g3">
+        <div>
+          <label className="fld">Expected error <span className="hint">(EE$)</span><Q t="How many misstatements you expect, from risk assessment and prior years. Low = few or none; Moderate = some (larger sample). MUS is unsuitable if many errors are expected."/></label>
+          <div className="seg" role="group" aria-label="Expected error level">
+            {["Low","Moderate"].map(x=>(
+              <button key={x} className={S.ee===x?"on":""} aria-pressed={S.ee===x} onClick={()=>S.set({ee:x})}>{x}</button>))}
+          </div>
+        </div>
+        <div>
+          <label className="fld">Confidence level<Q t="How sure you want to be that the population is not materially misstated. 95% = accepting a 5% risk the sample misses a material error. Higher confidence = larger sample."/></label>
+          <select value={S.confidence} onChange={e=>S.set({confidence:+e.target.value})}>
+            {CONF_LEVELS.map(c=><option key={c} value={c}>{c}%</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="fld">Materiality <span className="hint">(% of population)</span><Q t="The error size that would matter, as a % of the population value. Lower materiality = larger sample. This is a planning convenience — enter your actual tolerable misstatement in dollars on the Evaluate step."/></label>
+          <select value={S.materiality} onChange={e=>S.set({materiality:+e.target.value})}>
+            {MAT_LEVELS.map(m=><option key={m} value={m}>{m}%</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="callout info" style={{display:'flex',alignItems:'center',gap:18,flexWrap:'wrap'}}>
+        <div>
+          <div className="ttl" style={{marginBottom:2}}>Required sample size</div>
+          <div style={{fontSize:13}}>{S.ee} EE$ · {S.confidence}% confidence · {S.materiality}% materiality</div>
+        </div>
+        <div style={{fontSize:42,fontWeight:800,color:'var(--navy)',lineHeight:1,marginLeft:'auto'}}>{table}</div>
+        <button className="btn teal" onClick={()=>S.set({step:2})}>Use this &rarr; Select sample</button>
+      </div>
+
+      <h3>Guidance table</h3>
+      <TableBlock eeKey={S.ee} label={S.ee+" EE$"} accent={S.ee==="Low"?"ee-low":"ee-mod"}
+        selConf={S.confidence} selMat={S.materiality} active/>
+      <details className="method" style={{marginTop:12}}>
+        <summary>Compare with the {S.ee==="Low"?"Moderate":"Low"} EE$ table</summary>
+        <div style={{marginTop:10}}>
+          <TableBlock eeKey={S.ee==="Low"?"Moderate":"Low"} label={(S.ee==="Low"?"Moderate":"Low")+" EE$"}
+            accent={S.ee==="Low"?"ee-mod":"ee-low"} selConf={S.confidence} selMat={S.materiality}/>
+        </div>
+      </details>
+
+      <div className="note"><b>Dual-purpose testing:</b> cover the minimum sample sizes for <i>both</i> the
+        controls and MUS tables.</div>
+
+      <details className="method"><summary>How the sample size is used</summary>
+        <div>Step&nbsp;2 turns <code>n</code> into a <b>sampling interval</b> ≈ population ÷ n. Items ≥ the
+        interval are examined in full ("key items"); the rest are sampled every interval-dollars.</div>
+      </details>
+
+      <h3>Example documentation — sample-size estimate <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· updates with your inputs</span></h3>
+      <div className="wp">
+        <div className="lbl">Working-paper note — supplies &amp; services expenses</div>
+        <p><b>Population &amp; assertion:</b> sample of invoices for supplies and services expenses; testing occurrence
+          and accuracy (overstatement of recorded expenses).</p>
+        <p><b>Method:</b> Monetary Unit Sampling (value-weighted selection) — appropriate for a monetary population
+          where the risk is overstatement.</p>
+        <p><b>Parameters &amp; judgement:</b> {S.ee.toLowerCase()} expected error, <b>{S.confidence}%</b> confidence
+          (sampling risk {100-S.confidence}%) and materiality of <b>{S.materiality}%</b> of the population.</p>
+        <p><b>Result:</b> the required MUS sample size from the DST tables is <b>{table} invoices</b>. The sampling
+          interval (population book value ÷ {table}) is set in Step&nbsp;2; any invoice ≥ the interval is examined in
+          full as a key item, and zero/credit balances are tested separately.</p>
+        <p className="ref">Ref: ASA 530 para 6–7; ASA 320 (materiality); documented per ASA 230 para 8.</p>
+      </div>
+
+      <div className="row no-print" style={{marginTop:16,justifyContent:'flex-end'}}>
+        <button className="btn primary" onClick={()=>S.set({step:2})}>Next: Select sample &rarr;</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Step 2: Select sample ---------------- */
+function StepSelect({S}){
+  const fileRef=useRef();
+  const [fileMsg,setFileMsg]=useState(null);
+  const [listModal,setListModal]=useState(null);      // {title, rows:[{ref,raw}]}
+  const [selQ,setSelQ]=useState('');                  // search within the selected sample
+  const [selSort,setSelSort]=useState(null);          // null | 'ref' | 'amt'
+  const parsed = useMemo(()=> S.rawData.trim()? parseDelimited(S.rawData):[], [S.rawData]);
+  const headerRow = parsed.length? parsed[0]:[];
+  const colCount = useMemo(()=> parsed.reduce((m,r)=>Math.max(m,r.length),0), [parsed]);
+  const colNames = useMemo(()=> S.hasHeader
+    ? Array.from({length:colCount},(_,i)=> (headerRow[i]&&headerRow[i].trim())||("Column "+(i+1)))
+    : Array.from({length:colCount},(_,i)=>"Column "+(i+1)),
+  // eslint-disable-next-line
+  [parsed,S.hasHeader,colCount]);
+  // memoised — a fresh array every render would cascade into the pop memo and
+  // the fingerprint effect, recomputing over the whole file on every keystroke
+  const bodyRows = useMemo(()=> S.hasHeader? parsed.slice(1):parsed, [parsed,S.hasHeader]);
+
+  // auto-detect amount + reference columns when data changes
+  useEffect(()=>{
+    if(!parsed.length) return;
+    let best=-1,bestScore=-1;
+    for(let c=0;c<colCount;c++){
+      let good=0; for(const r of bodyRows){ if(!isNaN(parseAmount(r[c]))) good++; }
+      let score=good;
+      if(/amount|value|balance|total|gross|\bnet\b|debit|credit|\$|cost|price|\bsum\b/i.test(colNames[c]||'')) score+=1e6;
+      if(score>bestScore){bestScore=score;best=c;}
+    }
+    let ref=-1,refScore=-1;
+    for(let c=0;c<colCount;c++){
+      if(c===best) continue;
+      let sc = c<best?1:0;
+      if(/ref|id|number|\bno\b|invoice|name|customer|supplier|vendor|description|account|doc/i.test(colNames[c]||'')) sc+=10;
+      if(sc>refScore){refScore=sc;ref=c;}
+    }
+    S.set({amountCol:best<0?0:best, refCol:ref});
+  // eslint-disable-next-line
+  },[S.rawData,S.hasHeader]);
+
+  const pop = useMemo(()=>{
+    const items=[]; let excludedWrongSign=0, badParse=0, excludedTotals=0;
+    const unparsed=[], wrongSignRows=[], totalsRows=[];
+    const CAP=400;
+    const wantNeg = S.sampleBasis==='negative';
+    // a totals/subtotal row: some cell is exactly "Total"/"Totals"/"Grand total"/"Subtotal"/"Sum"
+    // (whole-cell match, so a supplier like "TotalEnergies" is NOT excluded)
+    const TOTAL_RE=/^\s*(grand\s+)?(sub[\s-]?)?totals?\s*:?\s*$|^\s*sum\s*:?\s*$/i;
+    const refOf=(r,i)=> S.refCol>=0 ? ((r[S.refCol]??'').toString().trim()||('Row '+(i+1))) : ('Row '+(i+1));
+    bodyRows.forEach((r,i)=>{
+      if(r.some(c=>TOTAL_RE.test(String(c==null?'':c)))){ excludedTotals++;
+        if(totalsRows.length<CAP) totalsRows.push({ref:refOf(r,i), raw:String(r[S.amountCol]==null?'':r[S.amountCol]).trim().slice(0,40)});
+        return; }
+      const v=parseAmount(r[S.amountCol]);
+      if(isNaN(v)){ badParse++;
+        if(unparsed.length<CAP) unparsed.push({ref:refOf(r,i), raw:String(r[S.amountCol]==null?'':r[S.amountCol]).trim().slice(0,40)});
+        return; }
+      if(wantNeg ? v>=0 : v<=0){ excludedWrongSign++;
+        if(wrongSignRows.length<CAP) wrongSignRows.push({ref:refOf(r,i), raw:money(v)});
+        return; }
+      items.push({ref:refOf(r,i), amount:Math.abs(v), signed:v, origIndex:i}); // MUS runs on the absolute amount
+    });
+    // optional deterministic ordering: sort by reference so the selection is
+    // reconstructable from the data itself (reperformance evidence)
+    if(S.sortByRef) items.sort((a,b)=>String(a.ref).localeCompare(String(b.ref),undefined,{numeric:true,sensitivity:'base'}));
+    const total=items.reduce((s,x)=>s+x.amount,0);
+    return {items,total,count:items.length,excludedWrongSign,badParse,excludedTotals,
+      unparsed,wrongSignRows,totalsRows,wantNeg};
+  },[bodyRows,S.amountCol,S.refCol,S.sampleBasis,S.sortByRef]);
+
+  // population fingerprint — recomputed whenever the effective population changes.
+  // Guarded against redundant state writes so it can never render-loop.
+  useEffect(()=>{
+    let alive=true;
+    if(pop.count===0){ if(S.fingerprint!==null) S.set({fingerprint:null}); return; }
+    const text=pop.items.map(it=>it.ref+'|'+it.amount.toFixed(2)).join('\n');
+    computeFingerprint(text).then(fp=>{
+      if(!alive) return;
+      const cur=S.fingerprint;
+      if(cur && cur.hash===fp.hash && cur.rows===pop.count) return;   // unchanged — no state write
+      S.set({fingerprint:{...fp, rows:pop.count, total:pop.total}});
+    });
+    return ()=>{ alive=false; };
+  // eslint-disable-next-line
+  },[pop.items]);
+
+  // default interval = the two-stratum residual interval (yields ~n distinct items),
+  // until the user enters their own
+  const suggestedInterval = useMemo(()=> pop.count>0 && S.sampleSize>0 ? residualInterval(pop.items,S.sampleSize) : 0,
+    [pop.items,pop.count,S.sampleSize]);
+  useEffect(()=>{
+    if(!S.intervalTouched && suggestedInterval>0)
+      S.set({interval:suggestedInterval.toFixed(2)});
+  // eslint-disable-next-line
+  },[suggestedInterval,S.intervalTouched]);
+
+  const intervalNum=parseFloat(S.interval);
+  const startNum=parseFloat(S.randomStart);
+  const intervalOk = intervalNum>0 && isFinite(intervalNum);
+  const startOk = startNum>0 && startNum<=intervalNum+1e-6;
+  const keyCountAtInterval = useMemo(()=> intervalOk ? pop.items.filter(it=>it.amount>=intervalNum-1e-6).length : 0,
+    [pop.items,intervalNum,intervalOk]);
+
+  // auto-populate a random start when the interval is valid and none is set (or it became invalid)
+  useEffect(()=>{
+    if(intervalOk && !(startNum>0 && startNum<=intervalNum+1e-6)){
+      let r=Math.random()*intervalNum; if(r<=0) r=intervalNum*0.5;
+      S.set({randomStart:r.toFixed(2)});
+    }
+  // eslint-disable-next-line
+  },[intervalNum,intervalOk]);
+
+  function genStart(){
+    if(!intervalOk) return;
+    let r=Math.random()*intervalNum; if(r<=0) r=intervalNum*0.5;
+    S.set({randomStart:r.toFixed(2)});
+  }
+  function loadFile(e){
+    const f=e.target.files[0]; if(!f) return;
+    setFileMsg(null);
+    const isExcel=/\.(xlsx|xlsm|xls)$/i.test(f.name);
+    const rd=new FileReader();
+    if(isExcel){
+      if(!window.XLSX){ setFileMsg({t:'err',m:'Excel support could not load (no internet connection?) — save the file as CSV and upload that instead.'}); e.target.value=''; return; }
+      rd.onload=()=>{ try{
+          const wb=XLSX.read(new Uint8Array(rd.result),{type:'array'});
+          const ws=wb.Sheets[wb.SheetNames[0]];
+          const csv=XLSX.utils.sheet_to_csv(ws);
+          S.set({rawData:csv, intervalTouched:false, selection:null});
+          setFileMsg({t:'ok',m:'Read “'+f.name+'” — first sheet ('+wb.SheetNames[0]+').'+(wb.SheetNames.length>1?' Workbook has '+wb.SheetNames.length+' sheets; only the first is used.':'')});
+        }catch(err){ setFileMsg({t:'err',m:'Could not read that Excel file — save it as CSV and upload that instead.'}); } };
+      rd.readAsArrayBuffer(f);
+    } else {
+      rd.onload=()=>S.set({rawData:rd.result, intervalTouched:false});
+      rd.readAsText(f);
+    }
+    e.target.value='';
+  }
+  function loadSample(){
+    const lines=["Reference,Customer,Amount"];
+    let s=987654321; const rnd=()=>{ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; };
+    const N=300;                                            // population >> sample size
+    for(let i=1;i<=N;i++){
+      let v; const r=rnd();
+      if(i<=4) v=Math.round(60000+rnd()*70000);            // a few large balances (become key items)
+      else if(r<0.15) v=Math.round(8000+rnd()*16000);      // some mid-size items
+      else v=Math.round(150+rnd()*6000);                   // many smaller items
+      lines.push(`INV-${1000+i},Customer ${((i*37)%120)+1},${v}`);
+    }
+    S.set({rawData:lines.join("\n"), hasHeader:true, intervalTouched:false, selection:null});
+  }
+  function doSelect(){
+    if(!intervalOk||!startOk||pop.count===0) return;
+    const sel=runSelection(pop.items,intervalNum,startNum);
+    const keyItems=sel.filter(i=>i.isKey);
+    const keyValue=keyItems.reduce((s,x)=>s+x.amount,0);
+    S.set({selection:{items:sel, interval:intervalNum, randomStart:startNum,
+      sampleSize:S.sampleSize, total:pop.total, popCount:pop.count,
+      ee:S.ee, confidence:S.confidence, materiality:S.materiality, sampleBasis:S.sampleBasis,
+      // reperformance evidence
+      amountColName: colNames[S.amountCol]||('Column '+(S.amountCol+1)),
+      refColName: S.refCol>=0 ? (colNames[S.refCol]||('Column '+(S.refCol+1))) : 'row number',
+      hasHeader:S.hasHeader, sortedByRef:!!S.sortByRef,
+      exclusions:{totals:pop.excludedTotals, wrongSign:pop.excludedWrongSign, unparsed:pop.badParse},
+      fingerprint:S.fingerprint, runAt:new Date().toISOString(), toolVersion:TOOL_VERSION,
+      keyCount:keyItems.length, keyValue, residValue:pop.total-keyValue},
+      audited:{}, unable:{}, confirmedOver:{}, anomaly:{}, materialityDollar:'', loadedName:''});
+  }
+  function exportSel(){
+    const sel=S.selection; if(!sel) return;
+    const neg=sel.sampleBasis==='negative';
+    const ex=sel.exclusions||{};
+    const meta=[
+      ["Monetary Unit Sampling — selected sample"],
+      ["Tool version",sel.toolVersion||TOOL_VERSION],
+      ["Selection run at",sel.runAt? new Date(sel.runAt).toLocaleString('en-AU'):""],
+      ["Performed by",S.username||""],
+      ["Sample basis",neg?"Negative values":"Positive values"],
+      ["Amount column",sel.amountColName||""],
+      ["Reference column",sel.refColName||""],
+      ["First row is header",sel.hasHeader===false?"No":"Yes"],
+      ["Sorted by reference before selection",sel.sortedByRef?"Yes":"No (file order)"],
+      ["Excluded - totals/subtotal rows",ex.totals!=null?ex.totals:""],
+      ["Excluded - wrong sign / zero",ex.wrongSign!=null?ex.wrongSign:""],
+      ["Excluded - unparsed rows",ex.unparsed!=null?ex.unparsed:""],
+      ["Population fingerprint",sel.fingerprint? (sel.fingerprint.algo+" "+sel.fingerprint.hash):""],
+      ["Expected error",sel.ee+" EE$"],["Confidence",sel.confidence+"%"],
+      ["Materiality",sel.materiality+"%"],["Population items",sel.popCount],
+      ["Population value (absolute)",sel.total.toFixed(2)],["Planned sample size",sel.sampleSize],
+      ["Sampling interval",sel.interval.toFixed(2)],["Random start",sel.randomStart.toFixed(2)],
+      ["Key items (>= interval)",(sel.keyCount!=null?sel.keyCount:sel.items.filter(i=>i.isKey).length)+" totalling "+(sel.keyValue!=null?sel.keyValue.toFixed(2):"")],
+      ["Residual population (sampled stratum)",sel.residValue!=null?sel.residValue.toFixed(2):""],
+      ["Items selected",sel.items.length],[""],
+      neg ? ["Reference","Amount (absolute)","Original (signed) amount","Cumulative","Type","Hits"]
+          : ["Reference","Book value","Cumulative","Type","Hits"]
+    ];
+    sel.items.forEach(r=> meta.push(
+      neg ? [r.ref,r.amount.toFixed(2),(r.signed!=null?r.signed.toFixed(2):''),r.cumEnd.toFixed(2),r.isKey?"Key item (100%)":"Sample item",r.nHits]
+          : [r.ref,r.amount.toFixed(2),r.cumEnd.toFixed(2),r.isKey?"Key item (100%)":"Sample item",r.nHits]));
+    saveTextFile(baseName(S.username,sel.sampleBasis)+".csv", toCSV(meta), 'text/csv', '.csv', 'CSV file');
+  }
+
+  const sel=S.selection;
+  // live values for the working-paper note (use the drawn sample if present, else current inputs)
+  const noteInterval = sel? sel.interval : intervalNum;
+  const noteStart = sel? sel.randomStart : startNum;
+  const noteCount = sel? sel.popCount : pop.count;
+  const noteTotal = sel? sel.total : pop.total;
+  const noteSize = sel? sel.sampleSize : S.sampleSize;
+  const noteNeg = sel? sel.sampleBasis==='negative' : pop.wantNeg;
+  const amountColName = colNames[S.amountCol]||'Amount';
+  const noteReady = noteCount>0;
+  return (
+    <div className="card">
+      <h2><span className="step-no">Step 2.</span> Select the sample</h2>
+      <p className="sub">Load your population, check the settings, then draw the sample.</p>
+
+      <h3>1 · Population data</h3>
+      <div className="row" style={{marginBottom:8}}>
+        <button className="btn ghost sm" onClick={()=>fileRef.current.click()}>Upload Excel / CSV…</button>
+        <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,.xlsx,.xlsm,.xls" style={{display:'none'}} onChange={loadFile}/>
+        <button className="btn ghost sm" onClick={loadSample}>Load example data</button>
+        <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12.5,marginLeft:6}}>
+          <input type="checkbox" checked={S.hasHeader} onChange={e=>S.set({hasHeader:e.target.checked})}/>
+          First row is a header
+        </label>
+        {S.rawData && <button className="btn ghost sm" onClick={()=>S.set({rawData:'',selection:null})}>Clear</button>}
+      </div>
+      {fileMsg && <div className={fileMsg.t==='ok'?'note':'err'} style={{marginBottom:8}}>{fileMsg.m}</div>}
+      {S.rawDataOmitted && !S.rawData.trim() &&
+        <div className="note" style={{marginBottom:8}}><b>Population not restored:</b> it was too large to auto-save in
+          this browser. Your drawn sample and evaluation were preserved — re-upload the source file here if you need to
+          redraw or run a reperform check.</div>}
+      <textarea placeholder="Paste rows from Excel or a CSV here — e.g.&#10;Reference, Customer, Amount&#10;INV-1001, Acme, 4820.55&#10;INV-1002, Globex, 92140.00"
+        value={S.rawData} onChange={e=>S.set({rawData:e.target.value, intervalTouched:false})}/>
+
+      <div style={{marginTop:12}}>
+        <label className="fld">Sample basis<Q t="Positive values is the usual MUS basis (overstatement testing). Negative values samples credits/refunds as their own population, on absolute amounts."/></label>
+        <div className="seg" style={{maxWidth:280}} role="group" aria-label="Sample basis">
+          <button className={S.sampleBasis!=='negative'?"on":""} aria-pressed={S.sampleBasis!=='negative'}
+            onClick={()=>S.set({sampleBasis:'positive',intervalTouched:false,selection:null})}>Positive values</button>
+          <button className={S.sampleBasis==='negative'?"on":""} aria-pressed={S.sampleBasis==='negative'}
+            onClick={()=>S.set({sampleBasis:'negative',intervalTouched:false,selection:null})}>Negative values</button>
+        </div>
+      </div>
+
+      {parsed.length>0 && (
+        <div className="grid g2" style={{marginTop:12}}>
+          <div>
+            <label className="fld">Amount column<Q t="The dollar column the sampling is based on — every dollar in it is a potential selection."/></label>
+            <select value={S.amountCol} onChange={e=>S.set({amountCol:+e.target.value,intervalTouched:false})}>
+              {colNames.map((n,i)=><option key={i} value={i}>{n}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="fld">Reference column<Q t="How selected items are identified in results and exports — an invoice/document number is ideal. Optional; row numbers are used otherwise."/></label>
+            <select value={S.refCol} onChange={e=>S.set({refCol:+e.target.value})}>
+              <option value={-1}>— use row number —</option>
+              {colNames.map((n,i)=><option key={i} value={i}>{n}</option>)}
+            </select>
+          </div>
+        </div>
+      )}
+
+      {parsed.length>0 && (
+        <>
+          <div className="hint" style={{margin:'12px 0 4px'}}>Preview —
+            {' '}<span style={{background:'var(--brand-fill)',padding:'0 5px',borderRadius:3,color:'var(--brand-press)'}}>amount</span> and
+            {' '}<span style={{background:'var(--bg-hover)',padding:'0 5px',borderRadius:3}}>reference</span> highlighted:</div>
+          <div className="scrollx" style={{maxHeight:220}}>
+            <table className="data">
+              <thead><tr>{colNames.map((n,i)=>
+                <th key={i} className={i===S.amountCol?'hl-amt':(i===S.refCol?'hl-ref':'')}>{n}</th>)}</tr></thead>
+              <tbody>
+                {bodyRows.slice(0,8).map((r,ri)=>(
+                  <tr key={ri}>{colNames.map((n,ci)=>
+                    <td key={ci} className={ci===S.amountCol?'hl-amt':(ci===S.refCol?'hl-ref':'')}>{String(r[ci]==null?'':r[ci]).slice(0,60)}</td>)}</tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {bodyRows.length>8 && <div className="hint" style={{marginTop:3}}>…and {num0(bodyRows.length-8)} more rows.</div>}
+        </>
+      )}
+
+      {parsed.length>0 && (
+        <div className="statgrid" style={{marginTop:14}}>
+          <Stat k={pop.wantNeg?"Negative items":"Population items"} v={num0(pop.count)}/>
+          <Stat k={pop.wantNeg?"Population value (abs)":"Population book value"} v={money(pop.total)}
+            title={S.fingerprint? 'Fingerprint: '+fpShort(S.fingerprint):undefined}/>
+          <Stat k={pop.wantNeg?"Excluded (≥ 0)":"Excluded (≤ 0)"} v={num0(pop.excludedWrongSign)}
+            title={pop.excludedWrongSign>0?'Click to list the excluded rows':undefined}
+            onClick={pop.excludedWrongSign>0? ()=>setListModal({title:'Excluded — wrong sign or zero ('+num0(pop.excludedWrongSign)+')',
+              rows:pop.wrongSignRows, more:pop.excludedWrongSign-pop.wrongSignRows.length}) : undefined}/>
+          <Stat k="Unparsed rows" v={num0(pop.badParse)}
+            title={pop.badParse>0?'Click to list the rows that could not be read':undefined}
+            onClick={pop.badParse>0? ()=>setListModal({title:'Unparsed rows ('+num0(pop.badParse)+') — amount could not be read as a number',
+              rows:pop.unparsed, more:pop.badParse-pop.unparsed.length}) : undefined}/>
+        </div>
+      )}
+      {listModal && (
+        <Dlg title={listModal.title} onClose={()=>setListModal(null)}
+          foot={<button className="btn sm" onClick={()=>setListModal(null)}>Close</button>}>
+          <table className="data"><thead><tr><th>Reference</th><th>Amount cell</th></tr></thead>
+            <tbody>{listModal.rows.map((u,i)=><tr key={i}><td>{u.ref}</td><td>{u.raw}</td></tr>)}</tbody></table>
+          {listModal.more>0 && <div className="hint" style={{marginTop:6}}>…and {num0(listModal.more)} more.</div>}
+        </Dlg>
+      )}
+      {parsed.length>0 && (pop.excludedWrongSign>0||pop.badParse>0||pop.excludedTotals>0) &&
+        <div className="note">
+          {pop.excludedTotals>0 && <><b>{pop.excludedTotals} totals row(s) ignored.</b> </>}
+          Excluded rows (click the cards to list them) are not sampled — test them separately.</div>}
+
+      <h3>2 · Sampling parameters</h3>
+      <div className="grid g3">
+        <div>
+          <label className="fld">Sample size (n)<Q t="How many items to test — from the Step 1 table. You can override it; the interval adjusts automatically."/></label>
+          <input type="number" value={S.sampleSize}
+            onChange={e=>S.set({sampleSize:Math.max(1,+e.target.value||1),intervalTouched:false})}/>
+          <div className="hint" style={{marginTop:5}}>Step 1 table: <b>{SAMPLE_TABLES[S.ee][S.confidence][S.materiality]}</b>
+            {S.sampleSize!==SAMPLE_TABLES[S.ee][S.confidence][S.materiality] &&
+              <a style={{marginLeft:6,cursor:'pointer',color:'var(--teal)'}}
+                onClick={()=>S.set({sampleSize:SAMPLE_TABLES[S.ee][S.confidence][S.materiality],intervalTouched:false})}>reset</a>}
+          </div>
+        </div>
+        <div>
+          <label className="fld">Sampling interval<Q t="The dollar stride between selections. Items at or above the interval are examined in full (key items); the rest are picked every interval-dollars. Defaults to a value that yields about n distinct items."/></label>
+          <NumText value={S.interval} ariaLabel="Sampling interval"
+            onChange={v=>S.set({interval:v,intervalTouched:true})}/>
+          <div className="hint" style={{marginTop:5}}>
+            {intervalOk
+              ? <><b>{num0(keyCountAtInterval)}</b> key item(s) ≥ this interval.</>
+              : "Load data first."}
+            {S.intervalTouched && suggestedInterval>0 &&
+              <a style={{marginLeft:6,cursor:'pointer',color:'var(--teal)'}}
+                onClick={()=>S.set({interval:suggestedInterval.toFixed(2),intervalTouched:false})}>use suggested</a>}
+          </div>
+        </div>
+        <div>
+          <label className="fld">Random start<Q t="Where the first stride lands (over 0, at most the interval). The only random element — the same population order, interval and random start always reproduce the identical sample, so it is recorded in every export."/></label>
+          <div className="row" style={{flexWrap:'nowrap'}}>
+            <NumText value={S.randomStart} ariaLabel="Random start"
+              onChange={v=>S.set({randomStart:v})}/>
+            <button className="btn ghost sm" style={{flex:'none'}} onClick={genStart} disabled={!intervalOk}
+              aria-label="Generate a new random start" title="Generate a new random start">↻</button>
+          </div>
+          {!startOk && S.randomStart!=='' &&
+            <div className="err" style={{marginTop:5}}>Must be &gt; 0 and ≤ interval.</div>}
+        </div>
+      </div>
+
+      <div className="row" style={{marginTop:16}}>
+        <button className="btn primary" onClick={doSelect}
+          disabled={!intervalOk||!startOk||pop.count===0}>Draw sample</button>
+      </div>
+      {pop.count===0 && parsed.length>0 && <div className="err">No {pop.wantNeg?"negative":"positive"} values found — check the amount column and the sample basis.</div>}
+
+      {sel && (
+        <>
+          <h3>Selected sample — {sel.items.length} items
+            ({sel.items.filter(i=>i.isKey).length} key, {sel.items.filter(i=>!i.isKey).length} sample)</h3>
+          <div className="note">
+            Interval <b>{money(sel.interval)}</b> · random start <b>{sel.randomStart>0?money(sel.randomStart):'not recorded'}</b> ·
+            {' '}<b>{num0(sel.items.filter(i=>i.isKey).length)}</b> key item(s) tested in full + <b>{num0(sel.items.filter(i=>!i.isKey).length)}</b> MUS selections
+            {sel.sampleBasis==='negative' && <> · negative basis (absolute amounts shown)</>}.</div>
+          <div className="row" style={{margin:'6px 0'}}>
+            <input type="text" placeholder="Search reference…" value={selQ} onChange={e=>setSelQ(e.target.value)}
+              style={{maxWidth:220}} aria-label="Search selected sample"/>
+            <div className="seg" style={{maxWidth:220}}>
+              {[[null,'Selection order'],['amt','Amount ↓']].map(([k,l])=>(
+                <button key={String(k)} className={selSort===k?'on':''} onClick={()=>setSelSort(k)}>{l}</button>))}
+            </div>
+          </div>
+          <div className="scrollx">
+            <table className="data">
+              <thead><tr>
+                <th>#</th><th>Reference</th><th className="num">Book value</th>
+                <th className="num">Cumulative $</th><th>Type</th><th className="num">Hits</th>
+              </tr></thead>
+              <tbody>
+                {sel.items
+                  .map((r,i)=>({...r,__i:i}))
+                  .filter(r=>!selQ.trim()||String(r.ref).toLowerCase().includes(selQ.trim().toLowerCase()))
+                  .sort((a,b)=> selSort==='ref'? String(a.ref).localeCompare(String(b.ref),undefined,{numeric:true})
+                              : selSort==='amt'? b.amount-a.amount : a.__i-b.__i)
+                  .map(r=>(
+                  <tr key={r.__i} className={r.isKey?"key-row":""}>
+                    <td>{r.__i+1}</td><td>{r.ref}</td>
+                    <td className="num">{money(r.amount)}</td>
+                    <td className="num">{money(r.cumEnd)}</td>
+                    <td><span className={"pill "+(r.isKey?"key":"smp")}
+                      title={r.isKey?"At or above the interval — examined in full":"Selected by probability proportional to size"}>{r.isKey?"Key (100%)":"Sample"}</span></td>
+                    <td className="num">{r.nHits}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      <details className="method"><summary>Selection methodology</summary>
+        <div><b>Two-stratum MUS.</b> Items ≥ the interval are key items — examined in full, counted once. The rest
+        are selected systematically: book values accumulate and a hit is taken every <code>interval</code> dollars
+        from the random start, so larger items are more likely to be chosen. No item is selected twice. The default
+        interval is derived so the total is about <code>n</code> distinct items. Population order + interval +
+        random start reproduce the selection exactly.</div>
+      </details>
+
+      <details className="method">
+      <summary>Example documentation — sample selection <span className="hint">· updates with your selections</span></summary>
+      <div className="wp">
+        <div className="lbl">Working-paper note — supplies &amp; services expenses</div>
+        {noteReady ? <>
+          <p><b>Method:</b> two-stratum Monetary Unit Sampling (individually significant items examined in full, then
+            probability-proportional-to-size sampling of the remainder), performed with the MUS tool on the
+            "{amountColName}" column, <b>{noteNeg?'negative':'positive'} values</b>.</p>
+          <p><b>Population:</b> {num0(noteCount)} invoices for supplies and services, total {money(noteTotal)}{noteNeg?' (absolute value of credit/negative items)':''}.</p>
+          <p><b>Parameters:</b> sample size {noteSize}; sampling interval {money(noteInterval)}; random start {noteStart>0?money(noteStart):'not recorded'}.</p>
+          {sel
+            ? <p><b>Result:</b> {sel.items.length} invoices selected — {sel.items.filter(i=>i.isKey).length} key items (≥ interval, examined in full) and {sel.items.filter(i=>!i.isKey).length} sample items. Performed by {S.username||'[initials]'} on {new Date().toLocaleDateString('en-AU')}.</p>
+            : <p className="muted">Click <b>Draw sample</b> to record the invoices selected.</p>}
+          <p><b>Reproducibility:</b> the population (in order), the interval and the random start are retained, and the selected invoices are exported to CSV / saved, so the selection can be re-performed.</p>
+        </> : <p className="muted">Load your population and choose the sample basis — this note will populate automatically.</p>}
+        <p className="ref">Ref: ASA 530 para 8 &amp; Appendix 1/4; ASA 230 para 9.</p>
+      </div>
+      </details>
+
+      <FilesPanel S={S} pop={pop}/>
+
+      <div className="row no-print" style={{marginTop:16,justifyContent:'space-between'}}>
+        <button className="btn" onClick={()=>S.set({step:1})}>&larr; Sample size</button>
+        <button className="btn primary" disabled={!sel} onClick={()=>S.set({step:3})}>Next: Evaluate &rarr;</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Step 3: Evaluate ---------------- */
+function StepEvaluate({S}){
+  const sel=S.selection;
+  const [evalMsg,setEvalMsg]=useState(null);
+  const [saveMsg,setSaveMsg]=useState(null);
+  const [filter,setFilter]=useState('all');
+  const [q,setQ]=useState('');
+  const [bulk,setBulk]=useState(null);          // {text, mode}
+  const [anomOpen,setAnomOpen]=useState(null);  // origIndex being marked / edited
+  const [anomJust,setAnomJust]=useState('');
+  const matTouched=useRef(false);
+  useEffect(()=>{
+    if(sel && !matTouched.current && !S.materialityDollar)
+      S.set({materialityDollar:(sel.total*sel.materiality/100).toFixed(2)});
+  // eslint-disable-next-line
+  },[sel]);
+  // NOTE: all hooks must run unconditionally — sel can become set while this
+  // component is already mounted, so nothing may sit behind the early return.
+  const opts=useMemo(()=>({unable:S.unable||{}, anomaly:S.anomaly||{}, confirmedOver:S.confirmedOver||{}}),
+    [S.unable,S.anomaly,S.confirmedOver]);
+  const ev=useMemo(()=> sel? evaluateSample(sel.items,S.audited,sel.interval,sel.confidence/100,opts) : null,
+    [sel,S.audited,opts]);
+  // provisional range while incomplete: best case (rest clean) vs worst case (rest fully wrong)
+  const range=useMemo(()=>{
+    if(!sel||!ev||ev.ready) return null;
+    const clean={...S.audited}; const worstUnable={...(S.unable||{})}; const conf={};
+    sel.items.forEach(it=>{ conf[it.origIndex]=true; });
+    ev.rows.forEach(r=>{ if(r.status==='untested'){ clean[r.origIndex]=String(r.book); worstUnable[r.origIndex]=true; } });
+    const best =evaluateSample(sel.items, clean,     sel.interval, sel.confidence/100, {unable:S.unable||{}, anomaly:S.anomaly||{}, confirmedOver:conf});
+    const worst=evaluateSample(sel.items, S.audited, sel.interval, sel.confidence/100, {unable:worstUnable, anomaly:S.anomaly||{}, confirmedOver:conf});
+    return {best:best.uml, worst:worst.uml};
+  },[sel,ev,S.audited,S.unable,S.anomaly]);
+
+  if(!sel) return (
+    <div className="card">
+      <h2><span className="step-no">Step 3.</span> Evaluate &amp; project errors</h2>
+      <div className="callout info">Draw a sample in Step 2, or open a saved sample or evaluation below.</div>
+      <FilesPanel S={S} saveInBar={false}/>
+    </div>
+  );
+
+  const matDollar=parseFloat(String(S.materialityDollar).replace(/,/g,''))||0;
+  const exceedsOver =ev.uml>matDollar;                  // overstatement conclusion (primary MUS test)
+  const exceedsUnder=ev.lowerLimit>matDollar;           // understatement conclusion (low power — see caveat)
+  const exceeds=exceedsOver||exceedsUnder;
+  // incremental allowance for sampling risk = limit − most likely − cushion (≥0; max() guards float dust)
+  const incrOver =Math.max(0, ev.uml       -ev.mleOver -ev.basicPrecision);
+  const incrUnder=Math.max(0, ev.lowerLimit-ev.mleUnder-ev.basicPrecision);
+  const errItems=ev.rows.filter(r=>(r.status==='tested'||r.status==='unable') && Math.abs(r.misst)>1e-6);
+  const basisNeg=sel.sampleBasis==='negative';
+  const toGo=ev.counts.untested+ev.counts.pending;
+
+  function setAud(idx,val){ S.set({audited:{...S.audited,[idx]:val}}); }
+  function fillNoError(){
+    const m={...S.audited};
+    sel.items.forEach(it=>{
+      const blank = m[it.origIndex]==null || String(m[it.origIndex]).trim()==='';
+      if(blank && !(S.unable||{})[it.origIndex]) m[it.origIndex]=it.amount.toString();
+    });
+    S.set({audited:m});
+  }
+  function toggleUnable(oi){
+    const u={...(S.unable||{})};
+    if(u[oi]) delete u[oi]; else u[oi]=true;
+    S.set({unable:u});
+  }
+  function confirmOver(oi){ S.set({confirmedOver:{...(S.confirmedOver||{}),[oi]:true}}); }
+  function openAnom(oi){ setAnomJust(((S.anomaly||{})[oi]||{}).just||''); setAnomOpen(oi); }
+  function saveAnom(){
+    const a={...(S.anomaly||{})};
+    a[anomOpen]={just:anomJust.trim(), by:S.username||'', at:new Date().toISOString()};
+    S.set({anomaly:a}); setAnomOpen(null);
+  }
+  function removeAnom(){
+    const a={...(S.anomaly||{})}; delete a[anomOpen];
+    S.set({anomaly:a}); setAnomOpen(null);
+  }
+  function applyBulk(){
+    const lines=(bulk.text||'').split(/\r?\n/).map(l=>l.trim()).filter(l=>l!=='');
+    const m={...S.audited}; let matched=0, skipped=0;
+    if(bulk.mode==='ref'){
+      const refIdx=new Map(sel.items.map(it=>[String(it.ref).trim().toLowerCase(), it.origIndex]));
+      for(const ln of lines){
+        const parts=ln.split(/[\t,]/).map(s=>s.trim()).filter(s=>s!=='');
+        if(parts.length<2){ skipped++; continue; }
+        const oi=refIdx.get(parts[0].toLowerCase());
+        const v=parseAmount(parts[parts.length-1]);
+        if(oi==null||isNaN(v)){ skipped++; continue; }
+        m[oi]=String(v); matched++;
+      }
+    } else {
+      for(let i=0;i<lines.length;i++){
+        if(i>=sel.items.length){ skipped++; continue; }
+        const v=parseAmount(lines[i]);
+        if(isNaN(v)){ skipped++; continue; }
+        m[sel.items[i].origIndex]=String(v); matched++;
+      }
+    }
+    S.set({audited:m});
+    setBulk({...bulk, result:'Applied '+matched+' value(s)'+(skipped?'; '+skipped+' line(s) skipped.':'.')});
+  }
+  async function exportEval(){
+    const neg=sel.sampleBasis==='negative';
+    const stName={tested:'Tested',untested:'Not yet tested',pending:'Awaiting >100% confirmation',unable:'Unable to test'};
+    const rows=[
+      ["Monetary Unit Sampling — evaluation"],
+      ["Tool version",sel.toolVersion||TOOL_VERSION],
+      ["Exported at",new Date().toLocaleString('en-AU')],
+      ["Performed by",S.username||""],
+      ["Sample basis",neg?"Negative values":"Positive values"],
+      ["Confidence",sel.confidence+"%"],["Sampling interval",sel.interval.toFixed(2)],
+      ["Random start",(sel.randomStart||0).toFixed(2)],
+      ["Population fingerprint",sel.fingerprint? (sel.fingerprint.algo+" "+sel.fingerprint.hash):""],
+      ["Tolerable misstatement / materiality",matDollar.toFixed(2)],
+      ["Items — tested / unable / awaiting confirmation / untested",
+        ev.counts.tested+" / "+ev.counts.unable+" / "+ev.counts.pending+" / "+ev.counts.untested],
+      ["Minimum error cushion (basic precision) — baseline sampling-risk allowance in both limits",ev.basicPrecision.toFixed(2)],
+      ["Most likely overstatement",ev.mleOver.toFixed(2)],
+      ["Incremental allowance for sampling risk (overstatement)",incrOver.toFixed(2)],
+      ["Upper misstatement limit = most likely overstatement + cushion + incremental allowance",ev.uml.toFixed(2)],
+      ...(ev.anomalies.length? [["UML if anomalies treated as representative",ev.umlIncl.toFixed(2)]]:[]),
+      ["Most likely understatement (indicative — MUS has low power against understatement)",ev.mleUnder.toFixed(2)],
+      ["Incremental allowance for sampling risk (understatement)",incrUnder.toFixed(2)],
+      ["Lower misstatement limit (understatement; indicative only) = most likely understatement + cushion + incremental allowance",ev.lowerLimit.toFixed(2)],
+      ["Net most likely error (carried to schedule of misstatements)",ev.netMLE.toFixed(2)],
+      ["Conclusion", !ev.ready ? ("INCOMPLETE — "+toGo+" item(s) unresolved; conclusion withheld")
+        : ((exceedsOver||exceedsUnder)
+            ? ((exceedsOver?"overstatement UML":"")+(exceedsOver&&exceedsUnder?" and ":"")+(exceedsUnder?"understatement LML":"")+" exceed(s) tolerable misstatement")
+            : "both upper and lower limits within tolerable misstatement")],[""],
+      ["Reference","Book value","Audited value","Status","Misstatement","Raw taint %","Taint used %","Projected","Type","Anomaly justification"]
+    ];
+    ev.rows.forEach(r=>rows.push([r.ref, r.book.toFixed(2),
+      r.hasAud?r.audited.toFixed(2):"", stName[r.status]||r.status,
+      (r.status==='tested'||r.status==='unable')?r.misst.toFixed(2):"",
+      (r.status==='tested'||r.status==='unable')?(r.rawTaint*100).toFixed(2)+"%":"",
+      (r.status==='tested'||r.status==='unable')?(r.taint*100).toFixed(2)+"%":"",
+      (r.status==='tested'||r.status==='unable')?r.projected.toFixed(2):"",
+      (r.isKey?"Key item":"Sample item")+(r.isAnomaly?" (anomaly — excluded from projection)":""),
+      r.isAnomaly?(((S.anomaly||{})[r.origIndex]||{}).just||''):""]));
+    rows.push([""]);
+    rows.push(["Workings — Stringer bound (overstatement), so a reviewer can re-add the result"]);
+    rows.push(["Reliability factors RF(0..n) at "+sel.confidence+"%", ev.rfList.map(x=>x.toFixed(2)).join(" | ")]);
+    rows.push(["Component","Reference","Taint %","RF from","RF to","RF increment","$ contribution"]);
+    rows.push(["Minimum error cushion (basic precision) = RF(0) × interval","","","",ev.RF0.toFixed(2),"",ev.basicPrecision.toFixed(2)]);
+    ev.overSchedule.forEach(s=>rows.push(["Ranked error "+s.rank, s.ref, (s.taint*100).toFixed(2)+"%",
+      s.rfFrom.toFixed(2), s.rfTo.toFixed(2), s.inc.toFixed(2), s.contribution.toFixed(2)]));
+    rows.push(["Key-item overstatements (actual, uncapped)","","","","","",ev.keyOver.toFixed(2)]);
+    rows.push(["Total — upper misstatement limit","","","","","",ev.uml.toFixed(2)]);
+    if(ev.underSchedule.length>0 || ev.keyUnder>0){
+      rows.push([""]);
+      rows.push(["Workings — Stringer bound (understatement / lower limit); indicative only, MUS has low power against understatement"]);
+      rows.push(["Minimum error cushion (basic precision) = RF(0) × interval","","","",ev.RF0.toFixed(2),"",ev.basicPrecision.toFixed(2)]);
+      ev.underSchedule.forEach(s=>rows.push(["Ranked understatement "+s.rank, s.ref, (s.taint*100).toFixed(2)+"%",
+        s.rfFrom.toFixed(2), s.rfTo.toFixed(2), s.inc.toFixed(2), s.contribution.toFixed(2)]));
+      rows.push(["Key-item understatements (actual, uncapped)","","","","","",ev.keyUnder.toFixed(2)]);
+      rows.push(["Total — lower misstatement limit","","","","","",ev.lowerLimit.toFixed(2)]);
+    }
+    const res=await saveTextFile(baseName(S.username,sel.sampleBasis)+"-evaluation.csv", toCSV(rows), 'text/csv', '.csv', 'CSV file');
+    setEvalMsg(res.cancelled ? 'Download cancelled.'
+      : res.picked ? 'Evaluation CSV saved to the location you chose.'
+      : 'Evaluation CSV downloaded to your computer.');
+  }
+
+  const stPill=(r)=>{
+    if(r.status==='unable')  return <span className="pill st-wo" title="Treated as fully misstated (ASA 530.11)">Unable</span>;
+    if(r.status==='pending') return <span className="pill st-bad" title="Entered value implies more than 100% misstatement — confirm it is not a typo">Confirm ›100%</span>;
+    if(r.status==='untested')return <span className="pill st-mut">Untested</span>;
+    if(r.isAnomaly)          return <span className="pill st-info" title="Excluded from projection (ASA 530.13)">Anomaly</span>;
+    return <span className="pill st-ok">Tested</span>;
+  };
+  const view=ev.rows.map((r,i)=>({r,i}))
+    .filter(({r})=> filter==='untested' ? (r.status!=='tested')          // awaiting values, pending confirms, unable to test
+      : filter==='errors' ? (r.status==='tested' && Math.abs(r.misst)>1e-6)  // misstatements actually found by testing
+      : true)
+    .filter(({r})=> !q.trim()||String(r.ref).toLowerCase().includes(q.trim().toLowerCase()));
+  // per-row hover explanations of the three calculated columns
+  const tMisst=r=>{
+    if(r.status==='unable') return "Unable to test — treated as fully misstated (ASA 530.11): misstatement = book value "+money(r.book);
+    if(r.status!=='tested'&&r.status!=='pending') return "";
+    return "Book "+money(r.book)+" − audited "+money(r.audited)+" = "+money(r.misst)
+      +(r.misst>1e-6?" (overstatement)":r.misst<-1e-6?" (understatement)":" (no error)");
+  };
+  const tTaint=r=>{
+    if(r.isKey) return "Key item — examined in full, so the actual misstatement is used; no tainting projection";
+    if(r.status==='unable') return "Unable to test — tainting set to 100% (fully misstated, ASA 530.11)";
+    if(r.status!=='tested'&&r.status!=='pending') return "";
+    return "Misstatement "+money(r.misst)+" ÷ book "+money(r.book)+" = "+(r.rawTaint*100).toFixed(1)+"%"
+      +(r.capped?" — capped at ±100% for the projection maths (the excess is disclosed separately)":"");
+  };
+  const tProj=r=>{
+    if(r.status!=='tested'&&r.status!=='unable') return "";
+    if(r.isAnomaly) return "Anomaly (ASA 530.13) — the actual error "+money(r.misst)+" still counts as a misstatement but is excluded from the projection";
+    if(r.isKey) return "Key item — actual misstatement, uncapped: "+money(r.projected)+" (no projection needed: 100% examined)";
+    return "Tainting "+(r.taint*100).toFixed(1)+"% × interval "+money(sel.interval)+" = "+money(r.projected);
+  };
+
+  return (
+    <div className="card">
+      <h2><span className="step-no">Step 3.</span> Evaluate &amp; project errors</h2>
+      <p className="sub">Enter what each item should have been — errors are projected to the population.</p>
+      <FilesPanel S={S} saveInBar={false}/>
+      {S.loadedName && <div className="note">Loaded: <b>{S.loadedName}</b>.</div>}
+
+      <h3>Test results <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· enter audited values beside each book value</span></h3>
+      {!ev.ready ? (
+        <div className="banner hold">
+          <span className="b-t">⏳ {toGo} of {sel.items.length} to resolve</span>
+          <span style={{flex:1}}>
+            Enter audited values{ev.counts.pending>0? ', confirm the '+ev.counts.pending+' over 100%':''},
+            or mark items <b>U</b> (unable to test). The conclusion appears once every item is resolved.
+            {range && <span className="hint" style={{display:'block',marginTop:2}}>
+              Rest clean → UML {money(range.best)} · rest fully wrong → {money(range.worst)} (tolerable {money(matDollar)}).</span>}
+          </span>
+        </div>
+      ) : (
+        <div className={"banner "+(exceeds?'warn':'ok')}>
+          <span className="b-t">{exceeds?'⚠ May exceed materiality':'✓ Within materiality'}</span>
+          <span>Upper (overstatement) limit <b>{money(ev.uml)}</b>{exceedsOver?' — over':''} · lower (understatement) limit
+            {' '}<b>{money(ev.lowerLimit)}</b>{exceedsUnder?' — over':''} · vs tolerable misstatement <b>{money(matDollar)}</b>
+            {' '}· net most likely error {money(ev.netMLE)}.</span>
+        </div>
+      )}
+
+      <div className="row" style={{marginBottom:6}}>
+        <button className="btn ghost sm" onClick={fillNoError}>Mark remaining "no error"</button>
+        <button className="btn ghost sm" onClick={()=>setBulk({text:'',mode:'ref',result:null})}>Paste audited values…</button>
+        <span className="hint"><b>{ev.counts.tested+ev.counts.unable}</b> of <b>{sel.items.length}</b> resolved
+          {ev.counts.pending>0 && <> · <b style={{color:'var(--bad)'}}>{ev.counts.pending} to confirm</b></>}
+          {ev.counts.unable>0 && <> · {ev.counts.unable} unable</>}</span>
+        <span style={{flex:1}}/>
+        <div className="seg" style={{maxWidth:280}}>
+          {[['all','All','Every selected item'],
+            ['untested','Untested','Items without a tested value — awaiting entry, awaiting a >100% confirmation, or unable to test'],
+            ['errors','Errors','Misstatements actually found by testing (unable-to-test items are under Untested)']].map(([k,l,t])=>(
+            <button key={k} className={filter===k?'on':''} title={t} onClick={()=>setFilter(k)}>{l}</button>))}
+        </div>
+        <input type="text" placeholder="Search…" value={q} onChange={e=>setQ(e.target.value)}
+          style={{maxWidth:150}} aria-label="Search sample items"/>
+      </div>
+
+      <div className="scrollx">
+        <table className="data">
+          <thead><tr>
+            <th>#</th><th>Reference</th>
+            <th className="num" title="The recorded amount being tested">Book value</th>
+            <th className="num" title="What the amount should be, per your testing">Audited value</th>
+            <th title="Tested · Untested · Unable to test (counts as fully misstated) · Anomaly">Status</th>
+            <th className="num" title="Book − audited. Positive = overstated">Misstatement</th>
+            <th className="num" title="Misstatement ÷ book value, capped at ±100% for projection">Tainting&nbsp;%</th>
+            <th className="num" title="Sample items: tainting × interval. Key items: the actual error">Projected</th>
+            <th title="Key = ≥ interval, tested in full · Sample = MUS selection">Type</th><th>Actions</th>
+          </tr></thead>
+          <tbody>
+            {view.map(({r,i},vi)=>(
+              <tr key={i} className={r.isKey?"key-row":""}>
+                <td>{i+1}</td><td>{r.ref}</td>
+                <td className="num">{money(r.book)}</td>
+                <td className="num">
+                  <input className={"inline-edit"+(r.status==='pending'?" cap":"")} type="number" placeholder="—"
+                    aria-label={"Audited value for "+r.ref} data-aidx={vi} disabled={r.status==='unable'}
+                    onKeyDown={e=>{ if(e.key==='Enter'){ const nx=document.querySelector('input[data-aidx="'+(vi+1)+'"]'); if(nx) nx.focus(); } }}
+                    value={S.audited[r.origIndex]??''} onChange={e=>setAud(r.origIndex,e.target.value)}/>
+                </td>
+                <td>{stPill(r)}</td>
+                <td title={tMisst(r)||undefined}
+                  className={"num "+((r.status==='tested'||r.status==='unable')?(r.misst>0?"miss-pos":r.misst<0?"miss-neg":""):"")}>
+                  {(r.status==='tested'||r.status==='unable')?money(r.misst):'—'}</td>
+                <td className="num" title={tTaint(r)||undefined}>{(r.status!=='tested'&&r.status!=='unable')||r.isKey ? '—'
+                  : (r.taint*100).toFixed(1)+'%'+(r.capped?' ⚠':'')}</td>
+                <td className="num" title={tProj(r)||undefined}>{(r.status==='tested'||r.status==='unable')?money(r.projected):'—'}</td>
+                <td><span className={"pill "+(r.isKey?"key":"smp")}
+                  title={r.isKey?"At or above the interval — examined in full":"Selected by probability proportional to size"}>{r.isKey?"Key":"Sample"}</span></td>
+                <td>
+                  <div style={{display:'flex',gap:4}}>
+                    {r.status==='pending' &&
+                      <button className="rbtn confirm" onClick={()=>confirmOver(r.origIndex)}
+                        title="Confirm this entry is correct (more than 100% misstated)">Confirm</button>}
+                    <button className={"rbtn"+(r.status==='unable'?' on':'')} onClick={()=>toggleUnable(r.origIndex)}
+                      title="Unable to test — treated as fully misstated (ASA 530.11)">U</button>
+                    {((r.status==='tested' && Math.abs(r.misst)>1e-6) || r.isAnomaly) &&
+                      <button className={"rbtn anom"+(r.isAnomaly?' on':'')} onClick={()=>openAnom(r.origIndex)}
+                        title="Mark as an anomaly — excluded from projection, justification required (ASA 530.13)">A</button>}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {view.length===0 && <div className="note">No items match this filter.</div>}
+
+      <h3>Projection to the population</h3>
+      <div style={{maxWidth:280}}>
+        <label className="fld">Tolerable misstatement / materiality ($)<Q t="Your actual tolerable misstatement in dollars — normally set from financial-statement materiality, not from this population. The default is only a convenience."/></label>
+        <NumText value={S.materialityDollar} ariaLabel="Tolerable misstatement"
+          onChange={v=>{matTouched.current=true; S.set({materialityDollar:v});}}/>
+        <div className="hint" style={{marginTop:5}}>Default = {sel.materiality}% × population book value
+          = {money(sel.total*sel.materiality/100)}.</div>
+      </div>
+      <div className="scrollx" style={{marginTop:12}}>
+        <div className="eqgrid">
+          <Stat k="Most likely overstatement" v={money(ev.mleOver)} tone="var(--navy)"
+            title="Best estimate of overstatement in the population: projected sample overstatements plus actual key-item overstatements. A point estimate, not the worst case."/>
+          <span className="op">+</span>
+          <Stat k="Minimum error cushion" v={money(ev.basicPrecision)}
+            title="Baseline allowance for sampling risk — carried even when zero errors are found, because a clean sample can never prove the population is error-free. RF(0) × interval. (Technically: basic precision.)"/>
+          <span className="op">+</span>
+          <Stat k="Incremental allowance" v={money(incrOver)}
+            title="Added allowance for sampling risk — the extra margin that grows as errors are found: each ranked error carries a risk premium above its projected amount. Zero errors found = zero incremental allowance."/>
+          <span className="op">=</span>
+          <Stat k="Upper misstatement limit" big v={money(ev.uml)} tone={exceedsOver?'var(--warn)':'var(--ok)'}
+            title={"Most likely overstatement plus the full allowance for sampling risk (cushion + incremental — the Stringer bound). We are "+sel.confidence+"% confident the true overstatement is no more than this. The primary MUS conclusion — compare with tolerable misstatement."}/>
+        </div>
+        <div className="eqgrid" style={{marginTop:8}}>
+          <Stat k="Most likely understatement" v={money(ev.mleUnder)} tone="var(--navy)"
+            title="Best estimate of understatement, projected the same way. Indicative only — MUS rarely selects understated items, so it has low power against understatement."/>
+          <span className="op">+</span>
+          <Stat k="Minimum error cushion" v={money(ev.basicPrecision)}
+            title="Baseline allowance for sampling risk — the same cushion in both limits. RF(0) × interval. (Technically: basic precision.)"/>
+          <span className="op">+</span>
+          <Stat k="Incremental allowance" v={money(incrUnder)}
+            title="Added allowance for sampling risk on the understatement side — grows as understatements are found. Zero understatements = zero incremental allowance."/>
+          <span className="op">=</span>
+          <Stat k="Lower misstatement limit" big v={money(ev.lowerLimit)} tone={exceedsUnder?'var(--warn)':'var(--ok)'}
+            title="The understatement equivalent of the upper limit — the same Stringer maths applied to understatement taints. A LOW figure is not assurance over completeness; a figure ABOVE materiality is a genuine red flag. Support with a separate completeness test."/>
+        </div>
+      </div>
+
+      {ev.ready ? (
+        <div className={"callout "+(exceeds?"warn":"ok")}>
+          <div className="ttl">{exceeds
+            ? "⚠ Projected misstatement may exceed materiality"
+            : "✓ Within materiality"}</div>
+          <div><b>Overstatement:</b> upper limit <b>{money(ev.uml)}</b> is {exceedsOver?"above":"below"} tolerable
+            misstatement <b>{money(matDollar)}</b>.</div>
+          <div style={{marginTop:4}}><b>Understatement:</b> lower limit <b>{money(ev.lowerLimit)}</b> is {exceedsUnder?"above":"below"} tolerable
+            misstatement <b>{money(matDollar)}</b>.</div>
+          <div style={{marginTop:6}}>{
+            exceedsOver&&exceedsUnder ? "Both limits exceed materiality — the population may be materially misstated. Propose adjustments, extend the sample, or investigate."
+            : exceedsOver ? "The overstatement limit exceeds materiality — the population may be materially overstated. Propose adjustments, extend the sample, or investigate."
+            : exceedsUnder ? "The understatement limit exceeds materiality — the population may be materially understated. Investigate: this is a real flag even though MUS is weak at detecting understatement (expand the note below)."
+            : "No evidence of material overstatement at the chosen confidence level. The understatement limit is also within materiality — but expand the note below before relying on it."}</div>
+          {ev.counts.unable>0 && <div style={{marginTop:6,fontSize:12.5}}>{ev.counts.unable} item(s) could not be
+            tested and are treated as fully misstated (ASA 530.11).</div>}
+          {ev.excessOver>0 && <div style={{marginTop:6,fontSize:12.5,fontWeight:600}}>Note: sampled item(s) were misstated
+            by more than their book value — the excess of {money(ev.excessOver)} is beyond what MUS can project;
+            consider treating those items as individually significant or extending testing.</div>}
+          {ev.anomalies.length>0 && <div style={{marginTop:6,fontSize:12.5}}>
+            <b>Anomal{ev.anomalies.length===1?'y':'ies'} excluded from projection:</b> {ev.anomalies.map(a=>a.ref+' ('+money(a.misst)+')').join(', ')}.
+            {' '}UML if treated as representative: <b>{money(ev.umlIncl)}</b>; as anomaly: <b>{money(ev.uml)}</b>.
+            {ev.anomalies.length===1
+              ? ' The actual error still counts as a misstatement and is carried to the schedule.'
+              : ' The actual errors still count as misstatements and are carried to the schedule.'}
+            {ev.anomalies.length>1 && <b style={{color:'var(--bad)'}}> More than one anomaly is contradictory — anomalies
+            are by definition extremely rare (ASA 530.13).</b>}</div>}
+          <details className="method" style={{marginTop:8}}>
+            <summary style={{color:'var(--warn-o)'}}>Reading the lower (understatement) limit</summary>
+            <div>MUS rarely selects understated items — an item recorded far too low is unlikely to be picked — so it has
+              <b> low power against understatement</b>. {ev.mleUnder>1e-6
+                ? <>The most likely understatement is <b>{money(ev.mleUnder)}</b>; treat the lower limit <b>{money(ev.lowerLimit)}</b> as indicative.</>
+                : <>No understatements were found in this sample, but that is <i>not</i> assurance of completeness — the lower limit of <b>{money(ev.lowerLimit)}</b> is only the minimum cushion.</>}
+              {' '}For real assurance over completeness, plan a separate directed test (e.g. a search for unrecorded liabilities
+              or a subsequent-payments review). A lower limit <i>above</i> materiality, however, is a genuine red flag. Details are in the CSV export.</div>
+          </details>
+        </div>
+      ) : (
+        <div className="note"><b>Conclusion withheld</b> — {toGo} item(s) unresolved. An item you cannot test counts
+          as <i>misstated</i>, not clean (ASA 530.11) — enter audited values, or mark it <b>U</b>.</div>
+      )}
+
+      <div className="row no-print">
+        <SaveSampleControls S={S} onMsg={setSaveMsg}/>
+        <button className="btn ghost" onClick={exportEval}>Download evaluation (CSV)</button>
+        {evalMsg && <span className="hint">{evalMsg}</span>}
+      </div>
+      {saveMsg && <div className={saveMsg.t==='err'?'err':'note'} style={{marginTop:8}}>{saveMsg.m}</div>}
+
+      {bulk && (
+        <Dlg title="Paste audited values" onClose={()=>setBulk(null)} wide
+          foot={<><button className="btn sm" onClick={()=>setBulk(null)}>Close</button>
+            <button className="btn primary sm" onClick={applyBulk} disabled={!bulk.text.trim()}>Apply</button></>}>
+          <div className="hint" style={{marginBottom:6}}>Paste straight from Excel — either <b>two columns</b>
+            (reference, audited value) matched by reference, or a <b>single column</b> of values in the same order
+            as the selected sample ({sel.items.length} items).</div>
+          <div className="seg" style={{maxWidth:340,marginBottom:8}}>
+            <button className={bulk.mode==='ref'?'on':''} onClick={()=>setBulk({...bulk,mode:'ref'})}>Match by reference</button>
+            <button className={bulk.mode==='order'?'on':''} onClick={()=>setBulk({...bulk,mode:'order'})}>By row order</button>
+          </div>
+          <textarea style={{minHeight:160,width:'100%'}} value={bulk.text} autoFocus
+            placeholder={bulk.mode==='ref'?"INV-1001\t4820.55\nINV-1002\t92140.00":"4820.55\n92140.00\n…"}
+            onChange={e=>{ const t=e.target.value;
+              const first=(t.split(/\r?\n/).find(l=>l.trim())||'');
+              const twoCol=first.split(/[\t,]/).filter(s=>s.trim()!=='').length>=2;
+              setBulk({...bulk, text:t, mode: t===''?bulk.mode:(twoCol?'ref':'order')}); }}/>
+          {bulk.result && <div className="note" style={{marginTop:8}}>{bulk.result}</div>}
+        </Dlg>
+      )}
+
+      {anomOpen!=null && (
+        <Dlg title={"Mark "+((sel.items.find(x=>x.origIndex===anomOpen)||{}).ref||'item')+" as an anomaly"}
+          onClose={()=>setAnomOpen(null)}
+          foot={<>
+            {(S.anomaly||{})[anomOpen] && <button className="btn danger sm" onClick={removeAnom}>Remove anomaly</button>}
+            <button className="btn sm" onClick={()=>setAnomOpen(null)}>Cancel</button>
+            <button className="btn primary sm" onClick={saveAnom} disabled={anomJust.trim().length<10}>Save</button></>}>
+          <div className="hint" style={{marginBottom:8}}>ASA 530.13: an anomaly is a misstatement <b>demonstrably not
+            representative</b> of the population. You must obtain a <b>high degree of certainty</b> through additional
+            procedures before excluding it from the projection — and its actual dollar error still counts as a
+            misstatement. Record what makes it non-representative and the extra work performed:</div>
+          <textarea style={{minHeight:110,width:'100%'}} value={anomJust} autoFocus
+            placeholder="e.g. One-off system conversion error on 3 July; IT confirmed the defect affected only this batch; all 14 affected invoices identified and tested separately with no further errors."
+            onChange={e=>setAnomJust(e.target.value)}/>
+          <div className="hint" style={{marginTop:4}}>{anomJust.trim().length<10?'Justification required (at least a sentence).':'Will record: '+(S.username||'[name not set]')+', today.'}</div>
+        </Dlg>
+      )}
+
+      <details className="method"><summary>How the limits are calculated (Stringer method)</summary>
+        <div>
+          <b>The Stringer method in plain English:</b> a deliberately cautious way of turning the errors found
+          in a sample into a ceiling for the whole population. Start with the minimum error cushion (the
+          allowance even a clean sample must carry), then add each error found <i>plus a risk premium</i>,
+          biggest error first. The result is not the expected misstatement — it is the amount we can be
+          {' '}{sel.confidence}% confident the true misstatement does not exceed. (Every cell and scorecard
+          above also explains its own number on hover.)<br/><br/>
+          <b>How the incremental allowance is built.</b> Reliability factors R(k) step up with each error
+          found — at {sel.confidence}% confidence:
+          <div className="scrollx"><table className="data" style={{maxWidth:560,margin:'8px 0'}}>
+            <thead><tr><th>Errors found</th><th className="num">R(k)</th>
+              <th className="num">Increment for that error</th><th className="num">Risk premium within it</th></tr></thead>
+            <tbody>
+              {[0,1,2,3].map(k=>{ const R=c=>reliabilityFactor(sel.confidence/100,c);
+                return (<tr key={k}><td>{k}</td><td className="num">{R(k).toFixed(2)}</td>
+                  <td className="num">{k===0?'— (sets the cushion)':(R(k)-R(k-1)).toFixed(2)}</td>
+                  <td className="num">{k===0?'—':(R(k)-R(k-1)-1).toFixed(2)}</td></tr>); })}
+            </tbody>
+          </table></div>
+          Each ranked error contributes <code>tainting × increment × interval</code>. The first 1.00 of the
+          increment carries the error itself (already counted in the most likely error); everything above 1.00
+          is the risk premium. Errors are ranked largest tainting first and the increments shrink down the
+          list, so the worst error carries the biggest premium. The premiums add up to the incremental
+          allowance.<br/><br/>
+          <b>Why {sel.confidence}% confidence?</b> Testing a sample instead of every item means accepting some
+          risk that the sample missed errors — here {100-sel.confidence}%. The factors are sized so that if the
+          population really were misstated beyond the limit, a sample like this would have revealed it at
+          least {sel.confidence} times in 100. Higher confidence means larger factors — a bigger cushion,
+          bigger premiums, and a higher (more cautious) limit.<br/><br/>
+          <b>Overstatements and understatements never offset.</b> Each direction gets its own ranking, its own
+          allowance and its own limit, and each is compared with tolerable misstatement on its own.
+        </div>
+      </details>
+
+      <details className="method">
+      <summary>Example documentation — projection of errors <span className="hint">· updates as you enter results</span></summary>
+      <div className="wp">
+        <div className="lbl">Working-paper note — supplies &amp; services expenses</div>
+        <p><b>Test:</b> {sel.items.length} invoices for supplies and services ({basisNeg?'credit/negative':'positive'} items) tested for {basisNeg?'misstatement':'overstatement'} by agreeing each invoice to supporting records.</p>
+        <p><b>Misstatements found:</b> {errItems.length===0
+          ? 'none — audited values agreed to recorded values.'
+          : errItems.length+' ('+errItems.slice(0,6).map(e=>e.ref).join(', ')+(errItems.length>6?', …':'')+').'}</p>
+        <p><b>Projection (at {sel.confidence}% confidence):</b> upper misstatement limit <b>{money(ev.uml)}</b> =
+          most likely overstatement {money(ev.mleOver)} + minimum error cushion (basic precision) {money(ev.basicPrecision)} +
+          incremental allowance {money(incrOver)}. Lower misstatement limit {money(ev.lowerLimit)} =
+          most likely understatement {money(ev.mleUnder)} + cushion + incremental allowance {money(incrUnder)}.
+          Net most likely error {money(ev.netMLE)}.</p>
+        <p><b>Conclusion:</b> {!ev.ready
+          ? '[conclusion withheld — '+toGo+' selected item(s) not yet resolved]'
+          : exceedsOver
+          ? 'the upper misstatement limit ('+money(ev.uml)+') exceeds tolerable misstatement ('+money(matDollar)+'), so the population may be materially overstated — request management to investigate and correct, and consider extending the sample.'
+          : 'the upper misstatement limit ('+money(ev.uml)+') is below tolerable misstatement ('+money(matDollar)+'), so there is no evidence the population is materially overstated.'}
+          {ev.ready && exceedsUnder && ' The lower misstatement limit ('+money(ev.lowerLimit)+') exceeds tolerable misstatement — the population may be materially understated; investigate and perform a directed completeness test.'}
+          {ev.ready && !exceedsUnder && ' MUS has low power against understatement; a separate completeness test is planned.'}</p>
+        {ev.counts.unable>0 && <p>{ev.counts.unable} item(s) could not be tested and were treated as fully misstated (ASA 530.11).</p>}
+        {ev.anomalies.length>0 && <p>{ev.anomalies.length} misstatement(s) treated as anomalies under ASA 530.13 (justification retained); their actual errors remain in the schedule of misstatements.</p>}
+        <p>{Math.abs(ev.netMLE)>1e-6? 'The most likely error of '+money(ev.netMLE)+' was carried to the schedule of misstatements. ' : ''}Performed by {S.username||'[initials]'} on {new Date().toLocaleDateString('en-AU')}.</p>
+        <p className="ref">Ref: ASA 530 para 12–15; ASA 450 (evaluation of misstatements).</p>
+      </div>
+      </details>
+
+      <div className="row no-print" style={{marginTop:16}}>
+        <button className="btn" onClick={()=>S.set({step:2})}>&larr; Select sample</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Save controls — name box + "Save current sample" (used in Files on
+   Step 2 and beside "Download evaluation (CSV)" on Step 3) ---------------- */
+function SaveSampleControls({S, onMsg}){
+  const [name,setName]=useState(S.loadedName||"");
+  const [nameEdited,setNameEdited]=useState(!!S.loadedName);
+  const canSave=!!S.selection;
+  // keep the name defaulted to username_ddmmyy_HHMM_basis until the user types their own
+  useEffect(()=>{ if(S.selection && !nameEdited) setName(S.defaultSampleName());
+  // eslint-disable-next-line
+  },[S.selection]);
+  async function doSave(){
+    const r=S.saveCurrentSample(name.trim());
+    if(!r.rec){ onMsg({t:'err',m:r.msg||'Could not save to this browser.'}); return; }
+    const res=await saveTextFile(safeFileName(r.name)+'.csv', toCSV(sampleRecToCSV(r.rec)), 'text/csv', '.csv', 'CSV file');
+    const browserPart = r.ok ? ('Saved “'+r.name+'” to this browser') : (r.msg||'Browser save failed');
+    const filePart = res.cancelled ? '; CSV not saved (cancelled).'
+      : res.picked ? ' and saved a CSV to the location you chose.'
+      : ' and downloaded a CSV copy to your computer.';
+    const dropNote = (r.dropped&&r.dropped.length)
+      ? ' The list keeps the '+MAX_SAVED+' most recent — removed “'+r.dropped.join('”, “')+'” (its CSV copy is unaffected).'
+      : '';
+    onMsg({t: r.ok?'ok':'err', m: browserPart + filePart + dropNote});
+    if(r.ok){ setNameEdited(false); setName(S.defaultSampleName()); }   // fresh suggested name for the next save
+  }
+  return (<>
+    <input type="text" aria-label="Sample name"
+      placeholder={canSave?"Name this sample…":"Draw or open a sample first"}
+      value={name} onChange={e=>{setName(e.target.value); setNameEdited(e.target.value.trim()!=='');}}
+      disabled={!canSave} style={{flex:'1 1 240px',maxWidth:320}}/>
+    <button className="btn teal sm" onClick={doSave} disabled={!canSave}>Save current sample</button>
+  </>);
+}
+
+/* ---------------- Files — one place to save, open and manage samples ---------------- */
+function FilesPanel({S, pop, saveInBar=true}){
+  const [msg,setMsg]=useState(null);
+  const [confirmDel,setConfirmDel]=useState(null);   // rec pending delete
+  const [repTarget,setRepTarget]=useState('');
+  const [repResult,setRepResult]=useState(null);
+  const fileRef=useRef();
+  // one Open button — detects what kind of file it is
+  function doOpen(e){
+    const f=e.target.files[0]; if(!f) return;
+    const rd=new FileReader();
+    rd.onload=()=>{
+      const text=String(rd.result||'');
+      const head=text.slice(0,200);
+      let r;
+      const dropNote=x=>(x&&x.dropped&&x.dropped.length)
+        ? ' The list keeps the '+MAX_SAVED+' most recent — removed “'+x.dropped.join('”, “')+'”.' : '';
+      if(/^\s*[\[{]/.test(text)){                      // legacy JSON export
+        r=S.importSavedSample(text);
+        setMsg(r.ok?{t:'ok',m:'Imported '+r.count+' sample(s) from JSON.'+dropNote(r)}:{t:'err',m:r.msg});
+      } else if(/—\s*evaluation/.test(head)){          // evaluation CSV → open in Evaluate
+        r=S.loadEvaluationCSV(text, f.name);
+        setMsg(r.ok?{t:'ok',m:'Opened evaluation “'+r.name+'” on the Evaluate step.'}:{t:'err',m:r.msg});
+      } else {                                          // saved/selected sample CSV → add to list and open
+        r=S.importSavedSampleCSV(text);
+        if(r.ok && r.rec){ S.loadSavedSample(r.rec); setMsg({t:'ok',m:'Imported and opened “'+r.name+'”.'+dropNote(r)}); }
+        else setMsg({t:'err',m:r.msg||'Could not read that file.'});
+      }
+    };
+    rd.readAsText(f); e.target.value='';
+  }
+  function exportRec(rec){
+    saveTextFile(safeFileName(rec.name)+'.csv', toCSV(sampleRecToCSV(rec)), 'text/csv', '.csv', 'CSV file');
+  }
+  // Reperform check: re-run the selection on the CURRENT population with a saved
+  // sample's parameters and diff the selected references (Step 2 only)
+  function runReperform(){
+    const rec=S.savedSamples.find(x=>x.id===repTarget);
+    if(!rec||!pop||pop.count===0) return;
+    const sel2=runSelection(pop.items, rec.interval, rec.randomStart);
+    const now=new Set(sel2.map(i=>String(i.ref).trim()));
+    const then=new Set((rec.items||[]).map(i=>String(i.ref).trim()));
+    const missing=[...then].filter(x=>!now.has(x));
+    const extra=[...now].filter(x=>!then.has(x));
+    const fpNow=S.fingerprint? S.fingerprint.hash:'', fpThen=rec.fingerprint? rec.fingerprint.hash:'';
+    setRepResult({ match: missing.length===0 && extra.length===0,
+      nowCount:sel2.length, thenCount:(rec.items||[]).length, missing, extra,
+      fpMatch: fpNow && fpThen ? (fpNow===fpThen) : null, recName:rec.name,
+      sortNote: (typeof rec.sortedByRef==='boolean' && !!S.sortByRef!==rec.sortedByRef)
+        ? 'Sort setting differs — saved sample was '+(rec.sortedByRef?'sorted by reference':'in file order')+'.' : null });
+  }
+
+  const list=S.savedSamples;
+  return (
+    <>
+      <h3>Files <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· save, open and manage samples</span></h3>
+      <div className="savebar">
+        {saveInBar && <SaveSampleControls S={S} onMsg={setMsg}/>}
+        <button className="btn ghost sm" onClick={()=>fileRef.current.click()}>Open file…</button>
+        <input ref={fileRef} type="file" accept=".csv,.json,text/csv,application/json" style={{display:'none'}} onChange={doOpen}/>
+        <span className="hint">{saveInBar?'Save = this browser + a CSV file. ':''}Open reads any saved sample or evaluation CSV. The list keeps the {MAX_SAVED} most recent.</span>
+      </div>
+      {msg && <div className={msg.t==='ok'?'note':'err'} style={{marginTop:8}}>{msg.m}</div>}
+
+      {list.length>0 && (
+        <div className="scrollx" style={{maxHeight:300,marginTop:10}}>
+          <table className="data">
+            <thead><tr><th>Name</th><th>Saved</th><th className="num">Items</th>
+              <th className="num">Interval</th><th>Parameters</th><th>Actions</th></tr></thead>
+            <tbody>
+              {list.map(r=>(
+                <tr key={r.id}>
+                  <td><b>{r.name}</b></td>
+                  <td>{r.savedAt? new Date(r.savedAt).toLocaleString('en-AU') : '—'}</td>
+                  <td className="num">{r.items?r.items.length:0}</td>
+                  <td className="num">{money(r.interval)}</td>
+                  <td>{r.ee} EE · {r.confidence}% · {r.materiality}% · {r.sampleBasis==='negative'?'neg':'pos'}</td>
+                  <td>
+                    <div style={{display:'flex',gap:6}}>
+                      <button className="btn primary sm" onClick={()=>S.loadSavedSample(r)}>Load</button>
+                      <button className="btn ghost sm" onClick={()=>exportRec(r)}>Export CSV</button>
+                      <button className="btn ghost sm" onClick={()=>setConfirmDel(r)}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {list.length===0 && <div className="note" style={{marginTop:8}}>Nothing saved yet — draw a sample and
+        <b> Save</b>, or <b>Open</b> a saved CSV.</div>}
+
+      {pop && pop.count>0 && list.length>0 && (
+        <div className="savebar" style={{marginTop:10}}>
+          <span style={{fontWeight:600,fontSize:12.5}}>Reperform check<Q t="Re-runs the selection on the population loaded above using a saved sample's interval and random start, and compares the selected references item by item. A match proves the sample re-performs; a mismatch means the population, its order, or the parameters changed."/></span>
+          <select value={repTarget} onChange={e=>{setRepTarget(e.target.value); setRepResult(null);}} style={{maxWidth:280}}>
+            <option value="">— choose a saved sample —</option>
+            {list.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+          <button className="btn ghost sm" onClick={runReperform} disabled={!repTarget}>Run check</button>
+        </div>
+      )}
+      {repResult && (
+        <div className={repResult.match?'note':'err'} style={{marginTop:8}}>
+          {repResult.match
+            ? <><b>✓ Match.</b> Re-running the selection reproduced all {num0(repResult.thenCount)} item(s) of “{repResult.recName}”.
+              {repResult.fpMatch===true && ' Population fingerprint also matches.'}
+              {repResult.fpMatch===false && ' Note: the population fingerprint differs — same selections, but the file is not identical.'}</>
+            : <><b>✗ Mismatch.</b> Re-running selects {num0(repResult.nowCount)} item(s) vs {num0(repResult.thenCount)} saved.
+              {repResult.fpMatch===false && ' The population fingerprint differs — this is not the same file/population.'}
+              {repResult.sortNote && ' '+repResult.sortNote}
+              {repResult.missing.length>0 && <> Missing: {repResult.missing.slice(0,8).join(', ')}{repResult.missing.length>8?'…':''}.</>}
+              {repResult.extra.length>0 && <> Extra: {repResult.extra.slice(0,8).join(', ')}{repResult.extra.length>8?'…':''}.</>}</>}
+        </div>
+      )}
+
+      {confirmDel && (
+        <ConfirmDlg title="Delete saved sample?"
+          body={<>Delete “<b>{confirmDel.name}</b>” from this browser? Any exported CSV copies are unaffected.</>}
+          confirmLabel="Delete"
+          onConfirm={()=>{ S.deleteSavedSample(confirmDel.id); setConfirmDel(null); }}
+          onCancel={()=>setConfirmDel(null)}/>
+      )}
+    </>
+  );
+}
+
+/* ---------------- Documentation guidance (ASA) ---------------- */
+function AsaRef({children}){ return <span className="asa">{children}</span>; }
+function StepDocs({S}){
+  const [wpMsg,setWpMsg]=useState('');
+  const sel=S.selection;
+  const ev = sel ? evaluateSample(sel.items, S.audited, sel.interval, sel.confidence/100,
+    {unable:S.unable||{}, anomaly:S.anomaly||{}, confirmedOver:S.confirmedOver||{}}) : null;
+  const matDollar = parseFloat(String(S.materialityDollar).replace(/,/g,''))||(sel? sel.total*sel.materiality/100:0);
+  const exceeds = ev? ev.uml>matDollar : false;
+  const exceedsUnder = ev? ev.lowerLimit>matDollar : false;
+  const incrOver = ev? Math.max(0, ev.uml       -ev.mleOver -ev.basicPrecision) : 0;
+  const incrUnder= ev? Math.max(0, ev.lowerLimit-ev.mleUnder-ev.basicPrecision) : 0;
+  const neg = !!(sel&&sel.sampleBasis==='negative');
+  const fp = (sel&&sel.fingerprint)||S.fingerprint;
+  const today=new Date().toLocaleDateString('en-AU');
+  return (
+    <div className="card docs">
+      <h2><span className="step-no">Documentation.</span> Evidencing your MUS work under the Australian Auditing Standards</h2>
+
+      <h3 style={{fontSize:12}}>Part A — what to record</h3>
+      <div className="note">Steps 1–3 each show a live working-paper note that fills in with your figures;
+        <b> Part B</b> below assembles them into one model workpaper.</div>
+
+      <h3>(a) Documenting the sample-size estimate</h3>
+      <p><b>Record</b> (<AsaRef>ASA 530</AsaRef> para 6–7; <AsaRef>ASA 320</AsaRef>; <AsaRef>ASA 230</AsaRef> para 8):</p>
+      <ul className="rec">
+        <li>the population and assertion, and that the population is complete (ties to the ledger);</li>
+        <li>why MUS, and the parameters with your reasons — expected error, confidence, materiality;</li>
+        <li>the resulting sample size and its source (this tool's tables);</li>
+        <li>how key items and any excluded items are handled.</li>
+      </ul>
+
+      <h3>(b) Documenting the sample selection — the tool used and how it selects</h3>
+      <p><b>Record</b> (<AsaRef>ASA 530</AsaRef> para 8 &amp; Appendix 1/4; <AsaRef>ASA 230</AsaRef> para 9):</p>
+      <ul className="rec">
+        <li>the tool (and version/date) and the method — fixed-interval MUS (probability-proportional-to-size);</li>
+        <li>the inputs that fix the selection: amount column, sample basis (positive/negative), population value and
+          count, interval, and random start;</li>
+        <li>that key items (≥ the interval) are examined in full;</li>
+        <li>that the selection re-performs from population order + interval + random start — attach the exported/saved
+          sample as the record of items tested;</li>
+        <li>who selected it and when.</li>
+      </ul>
+
+      <h3>(c) Documenting the projection (extrapolation) of errors to the population</h3>
+      <p><b>Record</b> (<AsaRef>ASA 530</AsaRef> para 12–15; <AsaRef>ASA 450</AsaRef>):</p>
+      <ul className="rec">
+        <li>each item's book value, audited value, misstatement and cause; flag any anomaly;</li>
+        <li>the projection — sample items = tainting × interval, key items = actual — giving the most likely error each way;</li>
+        <li>the upper (overstatement) and lower (understatement) misstatement limits (Stringer bound), the minimum error
+          cushion (basic precision) and confidence used — note MUS has low power against understatement;</li>
+        <li>the conclusion vs materiality and your response; carry misstatements to the misstatements schedule.</li>
+      </ul>
+
+      <h3 style={{fontSize:12}}>Part B — a model workpaper, built live from your current session</h3>
+      <div className="row no-print" style={{margin:'6px 0'}}>
+        <span className="hint">Fills in as you work through Steps 1–3 — save it to Word, update and copy it onto the audit file. Don't just copy this into Caseware!</span>
+        <button className="btn ghost sm" onClick={async()=>{
+          const el=document.getElementById('model-wp'); if(!el) return;
+          const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>MUS working paper</title><style>'
+            +'body{font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#222222;line-height:1.5;margin:2cm}'
+            +'p{margin:6pt 0} b{color:#000000} summary{font-weight:bold;margin:8pt 0 4pt}'
+            +'.lbl{font-weight:bold;text-transform:uppercase;color:#0f6cbd;font-size:10pt;letter-spacing:.5pt;margin-bottom:10pt}'
+            +'.ref{color:#666666;font-size:9pt} .muted{color:#888888}'
+            +'table{border-collapse:collapse;margin:8pt 0} th,td{border:1pt solid #bbbbbb;padding:3pt 6pt;font-size:9pt;text-align:left}'
+            +'th{background:#eef3fa} td.num,th.num{text-align:right}'
+            +'ul{margin:2pt 0 8pt 16pt;padding:0} li{margin:2pt 0}'
+            +'</style></head><body>'+el.innerHTML+'</body></html>';
+          const res=await saveTextFile(safeFileName(baseName(S.username,(sel&&sel.sampleBasis)||'positive')+'-working-paper')+'.doc',
+            html, 'application/msword', '.doc', 'Word document');
+          setWpMsg(res.cancelled?'Cancelled.':res.picked?'Working paper saved as a Word document.':'Working paper downloaded as a Word document (.doc).');
+        }}>Download working paper (Word)</button>
+        {wpMsg && <span className="hint">{wpMsg}</span>}
+      </div>
+      <div className="wp" id="model-wp" style={{display:'none'}}>
+        <div className="lbl">Working paper — Monetary Unit Sampling · detailed substantive testing</div>
+        <p><b>W/P ref:</b> [ref] · <b>Entity:</b> [entity] · <b>Period:</b> year ended [date] ·
+          <b> Account:</b> [account, e.g. supplies &amp; services expenses] ·
+          <b> Assertion:</b> occurrence and accuracy ({neg?'misstatement of credit items':'overstatement'}).</p>
+
+        <p><b>1 · Objective.</b> Conclude whether [account] is materially {neg?'misstated':'overstated'} by testing a
+          monetary-unit sample of recorded transactions and projecting the misstatements found to the population
+          (ASA 530).</p>
+
+        <p style={{marginBottom:2}}><b>2 · Population tested.</b></p>
+        <ul className="rec">
+          {sel? <>
+            <li>{num0(sel.popCount)} items totalling <b>{money(sel.total)}</b> — {neg?'negative':'positive'} values,
+              amount column “{sel.amountColName||'—'}”, references “{sel.refColName||'—'}”, file order.</li>
+            <li>Excluded and tested separately: {sel.exclusions?sel.exclusions.totals:0} totals row(s) ·
+              {' '}{sel.exclusions?sel.exclusions.wrongSign:0} wrong sign/zero · {sel.exclusions?sel.exclusions.unparsed:0} unparsed.</li>
+          </> : <li><span className="muted">[load the population on the Select step]</span></li>}
+          <li>Completeness: population agreed to [GL / trial balance ref] before selection.</li>
+        </ul>
+
+        <p style={{marginBottom:2}}><b>3 · Parameters &amp; assumptions</b> — a reviewer can reperform from these:</p>
+        <ul className="rec">
+          <li>{S.ee} expected error · <b>{S.confidence}%</b> confidence (sampling risk {100-S.confidence}%) ·
+            materiality {S.materiality}% — tolerable misstatement <b>{money(matDollar)}</b>.</li>
+          <li>Sample size <b>{SAMPLE_TABLES[S.ee][S.confidence][S.materiality]}</b> per the DST table; two-stratum MUS,
+            tool v{(sel&&sel.toolVersion)||TOOL_VERSION}.</li>
+          {sel && <li>Sampling interval <b>{money(sel.interval)}</b> · random start
+            <b> {sel.randomStart>0?money(sel.randomStart):'[not recorded]'}</b> · drawn
+            {' '}{sel.runAt? new Date(sel.runAt).toLocaleDateString('en-AU'):'[date]'}.</li>}
+          <li>Items ≥ the interval tested in full (key items); the rest selected every interval-dollars from the
+            random start.</li>
+          <li>Taintings capped at ±100% for projection · unable to test = fully misstated (ASA 530.11) · anomalies
+            excluded only with documented justification (ASA 530.13).</li>
+        </ul>
+
+        <p style={{marginBottom:2}}><b>4 · Work performed.</b></p>
+        <ul className="rec">
+          {sel? <li>{num0(sel.items.length)} items selected — {num0(sel.items.filter(i=>i.isKey).length)} key item(s)
+              covering {money(sel.items.filter(i=>i.isKey).reduce((s,x)=>s+x.amount,0))} + {num0(sel.items.filter(i=>!i.isKey).length)} MUS selections.</li>
+            : <li><span className="muted">[draw the sample on the Select step]</span></li>}
+          <li>Each item agreed to supporting evidence [e.g. supplier invoice, proof of payment, receipt of goods/services].</li>
+          {ev && <li>{ev.counts.tested+ev.counts.unable} of {sel.items.length} resolved — {ev.counts.unable} unable to
+            test (ASA 530.11) · {ev.anomalies.length} anomal{ev.anomalies.length===1?'y':'ies'} (ASA 530.13).
+            Misstatements found: <b>{ev.rows.filter(r=>(r.status==='tested'||r.status==='unable')&&Math.abs(r.misst)>1e-6).length}</b>.</li>}
+        </ul>
+
+        <details className="method" style={{margin:'10px 0'}}>
+          <summary><b>5 · Sample schedule</b> — items tested with book and audited values (ASA 230.9)</summary>
+          {ev? (
+            <div className="scrollx">
+              <table className="data" style={{marginTop:6}}>
+                <thead><tr><th>#</th><th>Reference</th><th>Type</th><th className="num">Book value</th>
+                  <th className="num">Audited value</th><th className="num">Misstatement</th><th>Status</th></tr></thead>
+                <tbody>
+                  {ev.rows.map((r,i)=>(
+                    <tr key={i}><td>{i+1}</td><td>{r.ref}</td><td>{r.isKey?'Key':'Sample'}</td>
+                      <td className="num">{money(r.book)}</td>
+                      <td className="num">{r.hasAud?money(r.audited):'—'}</td>
+                      <td className="num">{(r.status==='tested'||r.status==='unable')?money(r.misst):'—'}</td>
+                      <td>{r.status==='unable'?'Unable — fully misstated':r.status==='pending'?'Confirm >100%':r.status==='untested'?'Not yet tested':'Tested'}{r.isAnomaly?' · anomaly':''}</td></tr>))}
+                  <tr style={{fontWeight:600}}><td colSpan={3}>Total — {num0(ev.rows.length)} items</td>
+                    <td className="num">{money(ev.rows.reduce((s,r)=>s+r.book,0))}</td>
+                    <td className="num">{money(ev.rows.reduce((s,r)=>s+(r.hasAud?r.audited:0),0))}</td>
+                    <td className="num">{money(ev.rows.reduce((s,r)=>s+((r.status==='tested'||r.status==='unable')?r.misst:0),0))}</td>
+                    <td/></tr>
+                </tbody>
+              </table>
+            </div>
+          ) : <div className="muted" style={{marginTop:6}}>[draw the sample and enter audited values — the schedule fills in here]</div>}
+        </details>
+
+        <p style={{marginBottom:2}}><b>6 · Results &amp; evaluation.</b></p>
+        <ul className="rec">
+          {ev? <>
+            <li>Upper misstatement limit <b>{money(ev.uml)}</b> = most likely overstatement {money(ev.mleOver)} +
+              minimum error cushion {money(ev.basicPrecision)} + incremental allowance {money(incrOver)}; at
+              {' '}{sel.confidence}% confidence{ev.anomalies.length>0 && <> (if anomalies treated as representative: {money(ev.umlIncl)})</>}.</li>
+            <li>Lower misstatement limit {money(ev.lowerLimit)} = most likely understatement {money(ev.mleUnder)} +
+              cushion + incremental allowance {money(incrUnder)}.</li>
+            <li>Net most likely error <b>{money(ev.netMLE)}</b> carried to the schedule of misstatements.</li>
+            <li>MUS has low power against understatement — separate completeness test at [WP ref].</li>
+          </> : <li><span className="muted">[enter audited values on the Evaluate step]</span></li>}
+        </ul>
+
+        <p style={{marginBottom:2}}><b>7 · Conclusion</b> {ev&&ev.ready && <>(each limit vs tolerable misstatement {money(matDollar)})</>}:
+          {!ev? <span className="muted"> [complete the evaluation]</span>
+            : !ev.ready? <span className="muted"> [withheld — {ev.counts.untested+ev.counts.pending} item(s) unresolved]</span> : null}</p>
+        {ev&&ev.ready && <ul className="rec">
+          <li><b>Overstatement — upper misstatement limit {money(ev.uml)}</b> is {exceeds?'above':'below'} tolerable
+            misstatement, so {exceeds
+              ? <>the population may be materially {neg?'misstated':'overstated'}; adjustments proposed / testing extended at [WP ref].</>
+              : <>there is no evidence the population is materially {neg?'misstated':'overstated'}.</>}</li>
+          <li><b>Understatement — lower misstatement limit {money(ev.lowerLimit)}</b> is {exceedsUnder?'above':'below'} tolerable
+            misstatement, so {exceedsUnder
+              ? <>the population may be materially understated; investigated and completeness testing extended at [WP ref].</>
+              : <>this sample shows no material understatement. As MUS has low power against understatement, completeness is addressed by the separate test at [WP ref].</>}</li>
+          <li><b>Overall:</b> net most likely error {money(ev.netMLE)} and all misstatements found were carried to the schedule of misstatements.</li>
+        </ul>}
+
+        <p><b>Prepared by:</b> {S.username||'[name]'} on {today}. <b>Reviewed by:</b> [name / date].</p>
+        <p className="ref">Ref: ASA 530 para 6–15; ASA 230 para 8–9; ASA 320; ASA 450. Tool {TOOL_VERSION}.</p>
+      </div>
+
+      <div className="note"><b>Disclaimer.</b> This is general guidance to help structure your documentation; it is not a
+        substitute for the standards themselves or your office's methodology. Refer to the current Australian Auditing
+        Standards issued by the AUASB (auasb.gov.au) and exercise professional judgement.</div>
+    </div>
+  );
+}
+
+/* ---------------- App ---------------- */
+const DEFAULT_ST={
+  step:1, ee:"Low", confidence:95, materiality:5,
+  sampleSize:SAMPLE_TABLES.Low[95][5],
+  rawData:"", hasHeader:true, amountCol:0, refCol:0,
+  interval:"", intervalTouched:false, randomStart:"", sampleBasis:"positive", sortByRef:false,
+  selection:null, audited:{}, unable:{}, confirmedOver:{}, anomaly:{},
+  materialityDollar:"", loadedName:"", fingerprint:null
+};
+function App(){
+  // restore the previous session (auto-saved below) so a refresh loses nothing
+  const [st,setSt]=useState(()=>{
+    try{
+      const raw=window.localStorage.getItem(SESSION_KEY);
+      if(raw){ const s=JSON.parse(raw); if(s && typeof s==='object') return {...DEFAULT_ST, ...s}; }
+    }catch(e){}
+    return DEFAULT_ST;
+  });
+  const set=(patch)=>setSt(s=>({...s,...patch}));
+
+  // ---- auto-save the session to this browser (debounced; a very large pasted
+  // population is not persisted — stringifying megabytes on every keystroke
+  // makes the whole UI feel dead, and it would blow the localStorage quota) ----
+  const persistFailed=useRef(false);
+  useEffect(()=>{
+    const t=setTimeout(()=>{
+      const big = st.rawData && st.rawData.length>1000000;
+      const sess = big ? {...st, rawData:'', rawDataOmitted:true} : st;
+      try{
+        window.localStorage.setItem(SESSION_KEY, JSON.stringify(sess));
+        persistFailed.current=big;      // population itself not saved → warn on close
+      }catch(e){
+        try{
+          window.localStorage.setItem(SESSION_KEY, JSON.stringify({...st, rawData:'', rawDataOmitted:true}));
+        }catch(e2){}
+        persistFailed.current=true;
+      }
+    },500);
+    return ()=>clearTimeout(t);
+  },[st]);
+  // warn on close only when auto-save is not working and there is real work in flight
+  useEffect(()=>{
+    const h=(e)=>{ if(persistFailed.current && (st.selection||st.rawData)){ e.preventDefault(); e.returnValue=''; } };
+    window.addEventListener('beforeunload',h);
+    return ()=>window.removeEventListener('beforeunload',h);
+  },[st.selection,st.rawData]);
+  // open collapsed sections while printing (so working-paper notes etc. appear), then restore
+  useEffect(()=>{
+    const before=()=>{ document.querySelectorAll('details:not([open])').forEach(d=>{ d.dataset.autoOpened='1'; d.open=true; }); };
+    const after =()=>{ document.querySelectorAll('details[data-auto-opened]').forEach(d=>{ d.open=false; delete d.dataset.autoOpened; }); };
+    window.addEventListener('beforeprint',before); window.addEventListener('afterprint',after);
+    return ()=>{ window.removeEventListener('beforeprint',before); window.removeEventListener('afterprint',after); };
+  },[]);
+  function resetSession(){
+    try{ window.localStorage.removeItem(SESSION_KEY); }catch(e){}
+    setSt(DEFAULT_ST);
+  }
+
+  // performed-by / username (persisted) — used in default file names and working papers
+  const [username,setUsernameState]=useState(()=>{ try{return window.localStorage.getItem('mus_username')||'';}catch(e){return '';} });
+  function setUsername(v){ setUsernameState(v); try{window.localStorage.setItem('mus_username',v);}catch(e){} }
+
+  // ---- saved samples (persist to browser localStorage) ----
+  const [savedSamples,setSavedSamples]=useState(()=>loadSavedSamples().slice(0,MAX_SAVED));
+  function persist(list){ setSavedSamples(list); return writeSavedSamples(list); }
+  function saveCurrentSample(rawName){
+    const sel=st.selection; if(!sel) return {ok:false,msg:'Draw a sample first.'};
+    // always ADD a new entry (never overwrite) — uniquify the name if it collides
+    let name=(rawName&&rawName.trim())||baseName(username,sel.sampleBasis);
+    const taken=n=>savedSamples.some(x=>(x.name||'').toLowerCase()===n.toLowerCase());
+    if(taken(name)){ let k=2; while(taken(name+' ('+k+')')) k++; name=name+' ('+k+')'; }
+    const rec={ id:makeId(), name, savedAt:new Date().toISOString(), performedBy:username||"",
+      toolVersion:sel.toolVersion||TOOL_VERSION, runAt:sel.runAt||"",
+      amountColName:sel.amountColName||"", refColName:sel.refColName||"",
+      hasHeader:sel.hasHeader!==false, sortedByRef:!!sel.sortedByRef,
+      exclusions:sel.exclusions||null, fingerprint:sel.fingerprint||null,
+      ee:sel.ee, confidence:sel.confidence, materiality:sel.materiality, sampleBasis:sel.sampleBasis||'positive',
+      total:sel.total, popCount:sel.popCount, sampleSize:sel.sampleSize,
+      interval:sel.interval, randomStart:sel.randomStart,
+      materialityDollar:st.materialityDollar, audited:st.audited||{},
+      unable:st.unable||{}, confirmedOver:st.confirmedOver||{}, anomaly:st.anomaly||{},
+      items:sel.items.map(it=>({ref:it.ref,amount:it.amount,signed:it.signed,origIndex:it.origIndex,
+        cumStart:it.cumStart,cumEnd:it.cumEnd,isKey:it.isKey,nHits:it.nHits})) };
+    const list=[rec,...savedSamples];
+    const dropped=list.length>MAX_SAVED ? list.splice(MAX_SAVED).map(d=>d.name) : [];
+    const ok=persist(list);
+    return {ok, name, rec, dropped, msg: ok?'':'This browser blocked local storage — the downloaded file copy is your record.'};
+  }
+  function deleteSavedSample(id){ persist(savedSamples.filter(x=>x.id!==id)); }
+  function loadSavedSample(rec){
+    const selection={ items:rec.items||[], interval:rec.interval, randomStart:rec.randomStart,
+      sampleSize:rec.sampleSize, total:rec.total, popCount:rec.popCount,
+      ee:rec.ee, confidence:rec.confidence, materiality:rec.materiality, sampleBasis:rec.sampleBasis||'positive',
+      amountColName:rec.amountColName||'', refColName:rec.refColName||'',
+      hasHeader:rec.hasHeader!==false, sortedByRef:!!rec.sortedByRef,
+      exclusions:rec.exclusions||null, fingerprint:rec.fingerprint||null,
+      runAt:rec.runAt||'', toolVersion:rec.toolVersion||'' };
+    set({ selection, audited:rec.audited||{}, unable:rec.unable||{}, confirmedOver:rec.confirmedOver||{},
+      anomaly:rec.anomaly||{}, materialityDollar:rec.materialityDollar||'',
+      loadedName:rec.name, step:3, sampleBasis:rec.sampleBasis||'positive' });
+  }
+  function exportSavedSample(rec){
+    downloadCSV(safeFileName(rec.name||'sample')+'.csv', sampleRecToCSV(rec));
+  }
+  function importSavedSample(text){
+    try{
+      const data=JSON.parse(text);
+      let recs=Array.isArray(data)?data:[data];
+      recs=recs.filter(r=>r&&Array.isArray(r.items));
+      if(!recs.length) return {ok:false,msg:'No valid sample found in that file.'};
+      const list=[...savedSamples];
+      recs.forEach(r=>{ r.id=makeId(); if(!r.savedAt) r.savedAt=new Date().toISOString();
+        if(!r.name) r.name='Imported sample'; list.unshift(r); });
+      const dropped=list.length>MAX_SAVED ? list.splice(MAX_SAVED).map(d=>d.name) : [];
+      const ok=persist(list);
+      return {ok, count:recs.length, dropped, msg: ok?'':'Imported but could not persist to this browser.'};
+    }catch(e){ return {ok:false,msg:'That file is not valid JSON.'}; }
+  }
+  function importSavedSampleCSV(text){
+    try{
+      const rec=csvToSampleRec(text);
+      if(!rec) return {ok:false,msg:'That CSV is not a saved MUS sample.'};
+      rec.id=makeId(); rec.savedAt=new Date().toISOString();
+      const list=[rec,...savedSamples];
+      const dropped=list.length>MAX_SAVED ? list.splice(MAX_SAVED).map(d=>d.name) : [];
+      const ok=persist(list);
+      return {ok, name:rec.name, rec, dropped, msg: ok?'':'Imported but could not persist to this browser.'};
+    }catch(e){ return {ok:false,msg:'Could not read that CSV file.'}; }
+  }
+  function loadEvaluationCSV(text, fname){
+    try{
+      const rec=csvToEvalRec(text);
+      if(!rec) return {ok:false,msg:'That CSV is not a saved MUS evaluation.'};
+      const name=(fname||'evaluation').replace(/\.csv$/i,'');
+      const selection={ items:rec.items, interval:rec.interval, randomStart:rec.randomStart||0,
+        sampleSize:rec.items.length, total:rec.total, popCount:rec.items.length,
+        ee:'Low', confidence:rec.confidence, materiality:rec.materiality, sampleBasis:rec.sampleBasis };
+      set({ selection, audited:rec.audited||{}, unable:rec.unable||{}, confirmedOver:{}, anomaly:rec.anomaly||{},
+        materialityDollar:rec.materialityDollar||'', loadedName:name, step:3, sampleBasis:rec.sampleBasis });
+      return {ok:true, name};
+    }catch(e){ return {ok:false,msg:'Could not read that evaluation CSV.'}; }
+  }
+
+  function defaultSampleName(){ const b=(st.selection&&st.selection.sampleBasis)||st.sampleBasis; return baseName(username,b); }
+
+  const S={...st,set, username, setUsername, defaultSampleName, savedSamples, saveCurrentSample,
+    deleteSavedSample, loadSavedSample, exportSavedSample, importSavedSample, importSavedSampleCSV, loadEvaluationCSV};
+
+  // keep sample size synced to the table when planning params change
+  useEffect(()=>{ set({sampleSize:SAMPLE_TABLES[st.ee][st.confidence][st.materiality], intervalTouched:false});
+  // eslint-disable-next-line
+  },[st.ee,st.confidence,st.materiality]);
+
+  const steps=[
+    {n:1,t:"Sample size",d:"Confidence · materiality · EE"},
+    {n:2,t:"Select sample",d:"Probability-proportional-to-size"},
+    {n:3,t:"Evaluate",d:"Project errors to population"},
+  ];
+  return (
+    <>
+      <header className="app"><div className="wrap head-row">
+        <div>
+          <h1>Monetary Unit Sampling <span className="tag">AUDIT TOOL</span></h1>
+          <p>Runs entirely in your browser — nothing you enter leaves this page.</p>
+        </div>
+        <div className="who">
+          <label htmlFor="who-in" title="Recorded as the performer and used in default file names">Performed by</label>
+          <input id="who-in" type="text" value={username} onChange={e=>setUsername(e.target.value)}
+            placeholder="your name / initials"/>
+        </div>
+      </div></header>
+      <div className="wrap">
+        <nav className="steps" aria-label="Workflow">
+          {steps.map(s=>{
+            const done = (s.n===2 && !!st.selection) ||
+                         (s.n===3 && !!st.selection && Object.keys(st.audited||{}).length>0);
+            return (
+              <button key={s.n} className={st.step===s.n?"active":""}
+                aria-current={st.step===s.n?"step":undefined} onClick={()=>set({step:s.n})}>
+                <span className="num">{s.n}</span>
+                <span><span className="st">{s.t}</span><br/><span className="sd">{s.d}</span></span>
+                {done && <span className="done" title="completed" aria-hidden="true">✓</span>}
+              </button>
+            );
+          })}
+          <button className={"doc"+(st.step===4?" active":"")}
+            aria-current={st.step===4?"step":undefined} onClick={()=>set({step:4})}>
+            <span className="num">ASA</span>
+            <span><span className="st">Documentation</span><br/><span className="sd">Evidencing your work (AuASB)</span></span>
+          </button>
+        </nav>
+        {st.step===1 && <StepSize S={S}/>}
+        {st.step===2 && <StepSelect S={S}/>}
+        {st.step===3 && <StepEvaluate S={S}/>}
+        {st.step===4 && <StepDocs S={S}/>}
+        <div className="ftr">
+          MUS tool {TOOL_VERSION} · VAGO DST tables · Poisson reliability factors · apply professional judgement<br/>
+          Work is auto-saved in this browser · <span className="linklike" onClick={resetSession}>Reset session</span>
+        </div>
+      </div>
+    </>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+<script>
+/* Compile the JSX with the CLASSIC runtime (React.createElement) so it runs
+   in a normal, non-module browser script. */
+(function(){
+  try{
+    var el=document.getElementById('app-code');
+    var out=Babel.transform(el.textContent,{presets:[['react',{runtime:'classic'}]]}).code;
+    var s=document.createElement('script'); s.textContent=out; document.body.appendChild(s);
+  }catch(e){
+    console.error(e);
+    document.getElementById('root').innerHTML=
+      '<pre style="color:#b3261e;padding:18px;white-space:pre-wrap;font-family:Consolas,monospace">'+
+      'The tool failed to start:\n\n'+((e&&e.message)||e)+
+      '\n\n(Check your internet connection — the React/Babel libraries load from a CDN.)</pre>';
+  }
+})();
+</script>
+</body>
+</html>
