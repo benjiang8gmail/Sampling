@@ -417,6 +417,7 @@ const fpLine =(fp)=> fp? fp.algo+' '+fp.hash+' · '+num0(fp.rows)+' rows · '+mo
 
 /* ---- saved-sample persistence (browser localStorage) ---- */
 const SAVE_KEY='mus_saved_samples_v1';
+const MAX_SAVED=5;   // list keeps the 5 most recent; older ones drop off (a CSV copy is saved on every save)
 function loadSavedSamples(){
   try{ const r=window.localStorage.getItem(SAVE_KEY); const a=r?JSON.parse(r):[]; return Array.isArray(a)?a:[]; }
   catch(e){ return []; }
@@ -1803,11 +1804,15 @@ function FilesPanel({S, pop}){
     const r=S.saveCurrentSample(name.trim());
     if(!r.rec){ setMsg({t:'err',m:r.msg||'Could not save to this browser.'}); return; }
     const res=await saveTextFile(safeFileName(r.name)+'.csv', toCSV(sampleRecToCSV(r.rec)), 'text/csv', '.csv', 'CSV file');
-    const browserPart = r.ok ? ((r.replaced?'Updated “':'Saved “')+r.name+'” to this browser') : (r.msg||'Browser save failed');
+    const browserPart = r.ok ? ('Saved “'+r.name+'” to this browser') : (r.msg||'Browser save failed');
     const filePart = res.cancelled ? '; CSV not saved (cancelled).'
       : res.picked ? ' and saved a CSV to the location you chose.'
       : ' and downloaded a CSV copy to your computer.';
-    setMsg({t: r.ok?'ok':'err', m: browserPart + filePart});
+    const dropNote = (r.dropped&&r.dropped.length)
+      ? ' The list keeps the '+MAX_SAVED+' most recent — removed “'+r.dropped.join('”, “')+'” (its CSV copy is unaffected).'
+      : '';
+    setMsg({t: r.ok?'ok':'err', m: browserPart + filePart + dropNote});
+    if(r.ok){ setNameEdited(false); setName(S.defaultSampleName()); }   // fresh suggested name for the next save
   }
   // one Open button — detects what kind of file it is
   function doOpen(e){
@@ -1817,15 +1822,17 @@ function FilesPanel({S, pop}){
       const text=String(rd.result||'');
       const head=text.slice(0,200);
       let r;
+      const dropNote=x=>(x&&x.dropped&&x.dropped.length)
+        ? ' The list keeps the '+MAX_SAVED+' most recent — removed “'+x.dropped.join('”, “')+'”.' : '';
       if(/^\s*[\[{]/.test(text)){                      // legacy JSON export
         r=S.importSavedSample(text);
-        setMsg(r.ok?{t:'ok',m:'Imported '+r.count+' sample(s) from JSON.'}:{t:'err',m:r.msg});
+        setMsg(r.ok?{t:'ok',m:'Imported '+r.count+' sample(s) from JSON.'+dropNote(r)}:{t:'err',m:r.msg});
       } else if(/—\s*evaluation/.test(head)){          // evaluation CSV → open in Evaluate
         r=S.loadEvaluationCSV(text, f.name);
         setMsg(r.ok?{t:'ok',m:'Opened evaluation “'+r.name+'” on the Evaluate step.'}:{t:'err',m:r.msg});
       } else {                                          // saved/selected sample CSV → add to list and open
         r=S.importSavedSampleCSV(text);
-        if(r.ok && r.rec){ S.loadSavedSample(r.rec); setMsg({t:'ok',m:'Imported and opened “'+r.name+'”.'}); }
+        if(r.ok && r.rec){ S.loadSavedSample(r.rec); setMsg({t:'ok',m:'Imported and opened “'+r.name+'”.'+dropNote(r)}); }
         else setMsg({t:'err',m:r.msg||'Could not read that file.'});
       }
     };
@@ -1864,7 +1871,7 @@ function FilesPanel({S, pop}){
         <button className="btn teal sm" onClick={doSave} disabled={!canSave}>Save current sample</button>
         <button className="btn ghost sm" onClick={()=>fileRef.current.click()}>Open file…</button>
         <input ref={fileRef} type="file" accept=".csv,.json,text/csv,application/json" style={{display:'none'}} onChange={doOpen}/>
-        <span className="hint">Save = this browser + a CSV file. Open reads any saved sample or evaluation CSV.</span>
+        <span className="hint">Save = this browser + a CSV file. Open reads any saved sample or evaluation CSV. The list keeps the {MAX_SAVED} most recent.</span>
       </div>
       {msg && <div className={msg.t==='ok'?'note':'err'} style={{marginTop:8}}>{msg.m}</div>}
 
@@ -2138,7 +2145,10 @@ function App(){
   function persist(list){ setSavedSamples(list); return writeSavedSamples(list); }
   function saveCurrentSample(rawName){
     const sel=st.selection; if(!sel) return {ok:false,msg:'Draw a sample first.'};
-    const name=(rawName&&rawName.trim())||baseName(username,sel.sampleBasis);
+    // always ADD a new entry (never overwrite) — uniquify the name if it collides
+    let name=(rawName&&rawName.trim())||baseName(username,sel.sampleBasis);
+    const taken=n=>savedSamples.some(x=>(x.name||'').toLowerCase()===n.toLowerCase());
+    if(taken(name)){ let k=2; while(taken(name+' ('+k+')')) k++; name=name+' ('+k+')'; }
     const rec={ id:makeId(), name, savedAt:new Date().toISOString(), performedBy:username||"",
       toolVersion:sel.toolVersion||TOOL_VERSION, runAt:sel.runAt||"",
       amountColName:sel.amountColName||"", refColName:sel.refColName||"",
@@ -2151,12 +2161,10 @@ function App(){
       unable:st.unable||{}, confirmedOver:st.confirmedOver||{}, anomaly:st.anomaly||{},
       items:sel.items.map(it=>({ref:it.ref,amount:it.amount,signed:it.signed,origIndex:it.origIndex,
         cumStart:it.cumStart,cumEnd:it.cumEnd,isKey:it.isKey,nHits:it.nHits})) };
-    const list=[...savedSamples];
-    const i=list.findIndex(x=>(x.name||'').toLowerCase()===name.toLowerCase());
-    let replaced=false;
-    if(i>=0){ rec.id=list[i].id; list[i]=rec; replaced=true; } else list.unshift(rec);
+    const list=[rec,...savedSamples];
+    const dropped=list.length>MAX_SAVED ? list.splice(MAX_SAVED).map(d=>d.name) : [];
     const ok=persist(list);
-    return {ok, replaced, name, rec, msg: ok?'':'This browser blocked local storage — the downloaded file copy is your record.'};
+    return {ok, name, rec, dropped, msg: ok?'':'This browser blocked local storage — the downloaded file copy is your record.'};
   }
   function deleteSavedSample(id){ persist(savedSamples.filter(x=>x.id!==id)); }
   function loadSavedSample(rec){
@@ -2183,8 +2191,9 @@ function App(){
       const list=[...savedSamples];
       recs.forEach(r=>{ r.id=makeId(); if(!r.savedAt) r.savedAt=new Date().toISOString();
         if(!r.name) r.name='Imported sample'; list.unshift(r); });
+      const dropped=list.length>MAX_SAVED ? list.splice(MAX_SAVED).map(d=>d.name) : [];
       const ok=persist(list);
-      return {ok, count:recs.length, msg: ok?'':'Imported but could not persist to this browser.'};
+      return {ok, count:recs.length, dropped, msg: ok?'':'Imported but could not persist to this browser.'};
     }catch(e){ return {ok:false,msg:'That file is not valid JSON.'}; }
   }
   function importSavedSampleCSV(text){
@@ -2192,8 +2201,10 @@ function App(){
       const rec=csvToSampleRec(text);
       if(!rec) return {ok:false,msg:'That CSV is not a saved MUS sample.'};
       rec.id=makeId(); rec.savedAt=new Date().toISOString();
-      const ok=persist([rec,...savedSamples]);
-      return {ok, name:rec.name, rec, msg: ok?'':'Imported but could not persist to this browser.'};
+      const list=[rec,...savedSamples];
+      const dropped=list.length>MAX_SAVED ? list.splice(MAX_SAVED).map(d=>d.name) : [];
+      const ok=persist(list);
+      return {ok, name:rec.name, rec, dropped, msg: ok?'':'Imported but could not persist to this browser.'};
     }catch(e){ return {ok:false,msg:'Could not read that CSV file.'}; }
   }
   function loadEvaluationCSV(text, fname){
