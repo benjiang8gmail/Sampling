@@ -59,7 +59,7 @@ footer starts fresh). One **Files** panel (Steps 2 and 3) saves the current samp
 any previously saved sample or evaluation CSV (type auto-detected), and lists what's saved with Load / Export
 CSV / Delete. (On the Evaluate step the Save controls sit beside *Download evaluation (CSV)* at the foot of
 the results.) Every save **adds a new entry** (names are auto-uniquified, never overwritten); the browser list
-keeps the **five most recent** — older entries drop off with a notice, and the CSV copy written at save time is
+keeps the **three most recent** — older entries drop off with a notice, and the CSV copy written at save time is
 unaffected. Populations can be uploaded as **Excel (.xlsx)** or CSV.
 
 Every export is stamped with the **tool version**, run date/time, column choices, exclusion counts and a
@@ -67,7 +67,7 @@ Every export is stamped with the **tool version**, run date/time, column choices
 **sort by reference before selecting** makes the selection order reconstructable from the data itself, and the
 one-click **Reperform check** re-runs a saved sample's selection against the loaded population and reports
 match/mismatch item by item. The Documentation tab includes a live **model workpaper (Part B)** built from the
-current session and a **how-to-reperform** guide (Part C).
+current session, downloadable as a **Word document**.
 
 ## Methodology notes
 

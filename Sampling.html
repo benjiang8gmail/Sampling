@@ -417,7 +417,7 @@ const fpLine =(fp)=> fp? fp.algo+' '+fp.hash+' · '+num0(fp.rows)+' rows · '+mo
 
 /* ---- saved-sample persistence (browser localStorage) ---- */
 const SAVE_KEY='mus_saved_samples_v1';
-const MAX_SAVED=5;   // list keeps the 5 most recent; older ones drop off (a CSV copy is saved on every save)
+const MAX_SAVED=3;   // list keeps the 3 most recent; older ones drop off (a CSV copy is saved on every save)
 function loadSavedSamples(){
   try{ const r=window.localStorage.getItem(SAVE_KEY); const a=r?JSON.parse(r):[]; return Array.isArray(a)?a:[]; }
   catch(e){ return []; }
@@ -1963,6 +1963,7 @@ function FilesPanel({S, pop, saveInBar=true}){
 /* ---------------- Documentation guidance (ASA) ---------------- */
 function AsaRef({children}){ return <span className="asa">{children}</span>; }
 function StepDocs({S}){
+  const [wpMsg,setWpMsg]=useState('');
   const sel=S.selection;
   const ev = sel ? evaluateSample(sel.items, S.audited, sel.interval, sel.confidence/100,
     {unable:S.unable||{}, anomaly:S.anomaly||{}, confirmedOver:S.confirmedOver||{}}) : null;
@@ -2029,10 +2030,22 @@ function StepDocs({S}){
 
       <h3 style={{fontSize:12}}>Part B — a model workpaper, built live from your current session</h3>
       <div className="row no-print" style={{margin:'6px 0'}}>
-        <span className="hint">Fills in as you work through Steps 1–3 — print it or copy it onto the audit file.</span>
-        <button className="btn ghost sm" onClick={()=>window.print()}>Print working paper</button>
+        <span className="hint">Fills in as you work through Steps 1–3 — save it to Word or copy it onto the audit file.</span>
+        <button className="btn ghost sm" onClick={async()=>{
+          const el=document.getElementById('model-wp'); if(!el) return;
+          const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>MUS working paper</title><style>'
+            +'body{font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#222222;line-height:1.5;margin:2cm}'
+            +'p{margin:6pt 0} b{color:#000000}'
+            +'.lbl{font-weight:bold;text-transform:uppercase;color:#0f6cbd;font-size:10pt;letter-spacing:.5pt;margin-bottom:10pt}'
+            +'.ref{color:#666666;font-size:9pt} .muted{color:#888888}'
+            +'</style></head><body>'+el.innerHTML+'</body></html>';
+          const res=await saveTextFile(safeFileName(baseName(S.username,(sel&&sel.sampleBasis)||'positive')+'-working-paper')+'.doc',
+            html, 'application/msword', '.doc', 'Word document');
+          setWpMsg(res.cancelled?'Cancelled.':res.picked?'Working paper saved as a Word document.':'Working paper downloaded as a Word document (.doc).');
+        }}>Download working paper (Word)</button>
+        {wpMsg && <span className="hint">{wpMsg}</span>}
       </div>
-      <div className="wp">
+      <div className="wp" id="model-wp">
         <div className="lbl">Working paper — Monetary Unit Sampling · detailed substantive testing</div>
         <p><b>Entity / account:</b> [entity] — [account, e.g. supplies &amp; services expenses], year ended [date].
           &nbsp;<b>Assertion:</b> occurrence and accuracy ({(sel&&sel.sampleBasis==='negative')?'misstatement of credit items':'overstatement'}).</p>
@@ -2080,24 +2093,6 @@ function StepDocs({S}){
           : <span className="muted">[complete the evaluation]</span>}</p>
         <p><b>Performed by:</b> {S.username||'[name]'} on {today}. <b>Reviewed by:</b> [name / date].</p>
         <p className="ref">Ref: ASA 530 para 6–15; ASA 230 para 8–9; ASA 320; ASA 450. Tool {TOOL_VERSION}.</p>
-      </div>
-
-      <h3 style={{fontSize:12}}>Part C — reperforming the selection</h3>
-      <p>The selection is fully determined by <b>the population and its order, the interval, and the random
-        start</b> — evidence those three and reperformance is guaranteed:</p>
-      <ul className="rec">
-        <li><b>Keep the source file</b>; its <b>fingerprint</b> (row count, total, checksum) is written into every
-          export — a match proves "same population".</li>
-        <li><b>Pin down the order</b> — the tool selects in file order, so retain the file as supplied (its order is
-          recorded in every export).</li>
-        <li><b>Keep the exports</b> — the selection CSV records every setting and the items tested; the evaluation CSV
-          shows the workings so the bound can be re-added by hand.</li>
-      </ul>
-      <div className="callout info">
-        <div className="ttl">To reperform</div>
-        <div>Open the retained file on the Select step → same sort setting → enter the recorded interval and random
-          start → <b>Draw sample</b> → agree the references to the retained CSV. Or one click: <b>Reperform check</b>
-          in the Files panel re-runs a saved sample's parameters and reports match or mismatch, item by item.</div>
       </div>
 
       <div className="note"><b>Disclaimer.</b> This is general guidance to help structure your documentation; it is not a
@@ -2170,7 +2165,7 @@ function App(){
   function setUsername(v){ setUsernameState(v); try{window.localStorage.setItem('mus_username',v);}catch(e){} }
 
   // ---- saved samples (persist to browser localStorage) ----
-  const [savedSamples,setSavedSamples]=useState(()=>loadSavedSamples());
+  const [savedSamples,setSavedSamples]=useState(()=>loadSavedSamples().slice(0,MAX_SAVED));
   function persist(list){ setSavedSamples(list); return writeSavedSamples(list); }
   function saveCurrentSample(rawName){
     const sel=st.selection; if(!sel) return {ok:false,msg:'Draw a sample first.'};
