@@ -1979,8 +1979,6 @@ function StepDocs({S}){
   return (
     <div className="card docs">
       <h2><span className="step-no">Documentation.</span> Evidencing your MUS work under the Australian Auditing Standards</h2>
-      <p className="sub">What to record to meet the AUASB standards. Confirm paragraph references against the current
-        compiled standards and apply your office methodology.</p>
 
       <h3 style={{fontSize:12}}>Part A — what to record</h3>
       <div className="note">Steps 1–3 each show a live working-paper note that fills in with your figures;
@@ -2019,7 +2017,7 @@ function StepDocs({S}){
 
       <h3 style={{fontSize:12}}>Part B — a model workpaper, built live from your current session</h3>
       <div className="row no-print" style={{margin:'6px 0'}}>
-        <span className="hint">Fills in as you work through Steps 1–3 — save it to Word or copy it onto the audit file.</span>
+        <span className="hint">Fills in as you work through Steps 1–3 — save it to Word, update and copy it onto the audit file. Don't just copy this into Caseware!</span>
         <button className="btn ghost sm" onClick={async()=>{
           const el=document.getElementById('model-wp'); if(!el) return;
           const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>MUS working paper</title><style>'
@@ -2037,7 +2035,7 @@ function StepDocs({S}){
         }}>Download working paper (Word)</button>
         {wpMsg && <span className="hint">{wpMsg}</span>}
       </div>
-      <div className="wp" id="model-wp">
+      <div className="wp" id="model-wp" style={{display:'none'}}>
         <div className="lbl">Working paper — Monetary Unit Sampling · detailed substantive testing</div>
         <p><b>W/P ref:</b> [ref] · <b>Entity:</b> [entity] · <b>Period:</b> year ended [date] ·
           <b> Account:</b> [account, e.g. supplies &amp; services expenses] ·
