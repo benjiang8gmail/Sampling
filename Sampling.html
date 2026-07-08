@@ -1325,6 +1325,7 @@ function StepSelect({S}){
 function StepEvaluate({S}){
   const sel=S.selection;
   const [evalMsg,setEvalMsg]=useState(null);
+  const [saveMsg,setSaveMsg]=useState(null);
   const [filter,setFilter]=useState('all');
   const [q,setQ]=useState('');
   const [bulk,setBulk]=useState(null);          // {text, mode}
@@ -1357,7 +1358,7 @@ function StepEvaluate({S}){
     <div className="card">
       <h2><span className="step-no">Step 3.</span> Evaluate &amp; project errors</h2>
       <div className="callout info">Draw a sample in Step 2, or open a saved sample or evaluation below.</div>
-      <FilesPanel S={S}/>
+      <FilesPanel S={S} saveInBar={false}/>
     </div>
   );
 
@@ -1520,7 +1521,7 @@ function StepEvaluate({S}){
     <div className="card">
       <h2><span className="step-no">Step 3.</span> Evaluate &amp; project errors</h2>
       <p className="sub">Enter what each item should have been — errors are projected to the population.</p>
-      <FilesPanel S={S}/>
+      <FilesPanel S={S} saveInBar={false}/>
       {S.loadedName && <div className="note">Loaded: <b>{S.loadedName}</b>.</div>}
 
       <h3>Test results <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· enter audited values beside each book value</span></h3>
@@ -1692,10 +1693,12 @@ function StepEvaluate({S}){
       )}
 
       <div className="row no-print">
+        <SaveSampleControls S={S} onMsg={setSaveMsg}/>
         <button className="btn ghost" onClick={exportEval}>Download evaluation (CSV)</button>
         <button className="btn ghost" onClick={()=>window.print()}>Print working paper</button>
         {evalMsg && <span className="hint">{evalMsg}</span>}
       </div>
+      {saveMsg && <div className={saveMsg.t==='err'?'err':'note'} style={{marginTop:8}}>{saveMsg.m}</div>}
 
       {bulk && (
         <Dlg title="Paste audited values" onClose={()=>setBulk(null)} wide
@@ -1738,17 +1741,36 @@ function StepEvaluate({S}){
 
       <details className="method"><summary>How the limits are calculated (Stringer method)</summary>
         <div>
-          Every figure above explains itself on hover — each table cell shows its own calculation, and the
-          scorecards show how each limit is built (most likely error + cushion + incremental allowance).
-          What isn't shown there:<br/><br/>
-          <b>Errors are ranked, largest tainting first,</b> and each carries a risk premium on top of its
-          projected amount — the premiums come from published (Poisson) factors at {sel.confidence}% confidence
-          and shrink down the list, so the worst error carries the biggest premium. That is what builds the
-          incremental allowance.<br/><br/>
+          <b>The Stringer method in plain English:</b> a deliberately cautious way of turning the errors found
+          in a sample into a ceiling for the whole population. Start with the minimum error cushion (the
+          allowance even a clean sample must carry), then add each error found <i>plus a risk premium</i>,
+          biggest error first. The result is not the expected misstatement — it is the amount we can be
+          {' '}{sel.confidence}% confident the true misstatement does not exceed. (Every cell and scorecard
+          above also explains its own number on hover.)<br/><br/>
+          <b>How the incremental allowance is built.</b> Reliability factors R(k) step up with each error
+          found — at {sel.confidence}% confidence:
+          <div className="scrollx"><table className="data" style={{maxWidth:560,margin:'8px 0'}}>
+            <thead><tr><th>Errors found</th><th className="num">R(k)</th>
+              <th className="num">Increment for that error</th><th className="num">Risk premium within it</th></tr></thead>
+            <tbody>
+              {[0,1,2,3].map(k=>{ const R=c=>reliabilityFactor(sel.confidence/100,c);
+                return (<tr key={k}><td>{k}</td><td className="num">{R(k).toFixed(2)}</td>
+                  <td className="num">{k===0?'— (sets the cushion)':(R(k)-R(k-1)).toFixed(2)}</td>
+                  <td className="num">{k===0?'—':(R(k)-R(k-1)-1).toFixed(2)}</td></tr>); })}
+            </tbody>
+          </table></div>
+          Each ranked error contributes <code>tainting × increment × interval</code>. The first 1.00 of the
+          increment carries the error itself (already counted in the most likely error); everything above 1.00
+          is the risk premium. Errors are ranked largest tainting first and the increments shrink down the
+          list, so the worst error carries the biggest premium. The premiums add up to the incremental
+          allowance.<br/><br/>
+          <b>Why {sel.confidence}% confidence?</b> Testing a sample instead of every item means accepting some
+          risk that the sample missed errors — here {100-sel.confidence}%. The factors are sized so that if the
+          population really were misstated beyond the limit, a sample like this would have revealed it at
+          least {sel.confidence} times in 100. Higher confidence means larger factors — a bigger cushion,
+          bigger premiums, and a higher (more cautious) limit.<br/><br/>
           <b>Overstatements and understatements never offset.</b> Each direction gets its own ranking, its own
-          allowance and its own limit, and each is compared with tolerable misstatement on its own.<br/><br/>
-          <b>To check it by hand:</b> the evaluation CSV lists the build-up line by line — cushion, each ranked
-          error's contribution, key-item errors, total — so a reviewer can re-add both limits with a calculator.
+          allowance and its own limit, and each is compared with tolerable misstatement on its own.
         </div>
       </details>
 
@@ -1784,25 +1806,19 @@ function StepEvaluate({S}){
   );
 }
 
-/* ---------------- Files — one place to save, open and manage samples ---------------- */
-function FilesPanel({S, pop}){
+/* ---------------- Save controls — name box + "Save current sample" (used in Files on
+   Step 2 and beside "Download evaluation (CSV)" on Step 3) ---------------- */
+function SaveSampleControls({S, onMsg}){
   const [name,setName]=useState(S.loadedName||"");
   const [nameEdited,setNameEdited]=useState(!!S.loadedName);
-  const [msg,setMsg]=useState(null);
-  const [confirmDel,setConfirmDel]=useState(null);   // rec pending delete
-  const [repTarget,setRepTarget]=useState('');
-  const [repResult,setRepResult]=useState(null);
-  const fileRef=useRef();
   const canSave=!!S.selection;
-
   // keep the name defaulted to username_ddmmyy_HHMM_basis until the user types their own
   useEffect(()=>{ if(S.selection && !nameEdited) setName(S.defaultSampleName());
   // eslint-disable-next-line
   },[S.selection]);
-
   async function doSave(){
     const r=S.saveCurrentSample(name.trim());
-    if(!r.rec){ setMsg({t:'err',m:r.msg||'Could not save to this browser.'}); return; }
+    if(!r.rec){ onMsg({t:'err',m:r.msg||'Could not save to this browser.'}); return; }
     const res=await saveTextFile(safeFileName(r.name)+'.csv', toCSV(sampleRecToCSV(r.rec)), 'text/csv', '.csv', 'CSV file');
     const browserPart = r.ok ? ('Saved “'+r.name+'” to this browser') : (r.msg||'Browser save failed');
     const filePart = res.cancelled ? '; CSV not saved (cancelled).'
@@ -1811,9 +1827,25 @@ function FilesPanel({S, pop}){
     const dropNote = (r.dropped&&r.dropped.length)
       ? ' The list keeps the '+MAX_SAVED+' most recent — removed “'+r.dropped.join('”, “')+'” (its CSV copy is unaffected).'
       : '';
-    setMsg({t: r.ok?'ok':'err', m: browserPart + filePart + dropNote});
+    onMsg({t: r.ok?'ok':'err', m: browserPart + filePart + dropNote});
     if(r.ok){ setNameEdited(false); setName(S.defaultSampleName()); }   // fresh suggested name for the next save
   }
+  return (<>
+    <input type="text" aria-label="Sample name"
+      placeholder={canSave?"Name this sample…":"Draw or open a sample first"}
+      value={name} onChange={e=>{setName(e.target.value); setNameEdited(e.target.value.trim()!=='');}}
+      disabled={!canSave} style={{flex:'1 1 240px',maxWidth:320}}/>
+    <button className="btn teal sm" onClick={doSave} disabled={!canSave}>Save current sample</button>
+  </>);
+}
+
+/* ---------------- Files — one place to save, open and manage samples ---------------- */
+function FilesPanel({S, pop, saveInBar=true}){
+  const [msg,setMsg]=useState(null);
+  const [confirmDel,setConfirmDel]=useState(null);   // rec pending delete
+  const [repTarget,setRepTarget]=useState('');
+  const [repResult,setRepResult]=useState(null);
+  const fileRef=useRef();
   // one Open button — detects what kind of file it is
   function doOpen(e){
     const f=e.target.files[0]; if(!f) return;
@@ -1864,14 +1896,10 @@ function FilesPanel({S, pop}){
     <>
       <h3>Files <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· save, open and manage samples</span></h3>
       <div className="savebar">
-        <input type="text" aria-label="Sample name"
-          placeholder={canSave?"Name this sample…":"Draw or open a sample first"}
-          value={name} onChange={e=>{setName(e.target.value); setNameEdited(e.target.value.trim()!=='');}}
-          disabled={!canSave} style={{flex:'1 1 240px',maxWidth:320}}/>
-        <button className="btn teal sm" onClick={doSave} disabled={!canSave}>Save current sample</button>
+        {saveInBar && <SaveSampleControls S={S} onMsg={setMsg}/>}
         <button className="btn ghost sm" onClick={()=>fileRef.current.click()}>Open file…</button>
         <input ref={fileRef} type="file" accept=".csv,.json,text/csv,application/json" style={{display:'none'}} onChange={doOpen}/>
-        <span className="hint">Save = this browser + a CSV file. Open reads any saved sample or evaluation CSV. The list keeps the {MAX_SAVED} most recent.</span>
+        <span className="hint">{saveInBar?'Save = this browser + a CSV file. ':''}Open reads any saved sample or evaluation CSV. The list keeps the {MAX_SAVED} most recent.</span>
       </div>
       {msg && <div className={msg.t==='ok'?'note':'err'} style={{marginTop:8}}>{msg.m}</div>}
 

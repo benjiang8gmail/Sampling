@@ -57,7 +57,8 @@ Enter your name in the **Performed by** field (top right) — it is remembered a
 The whole session **auto-saves to the browser** (an accidental refresh loses nothing; *Reset session* in the
 footer starts fresh). One **Files** panel (Steps 2 and 3) saves the current sample (browser + CSV), **opens**
 any previously saved sample or evaluation CSV (type auto-detected), and lists what's saved with Load / Export
-CSV / Delete. Every save **adds a new entry** (names are auto-uniquified, never overwritten); the browser list
+CSV / Delete. (On the Evaluate step the Save controls sit beside *Download evaluation (CSV)* at the foot of
+the results.) Every save **adds a new entry** (names are auto-uniquified, never overwritten); the browser list
 keeps the **five most recent** — older entries drop off with a notice, and the CSV copy written at save time is
 unaffected. Populations can be uploaded as **Excel (.xlsx)** or CSV.
 
