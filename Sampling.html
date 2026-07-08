@@ -1522,6 +1522,7 @@ function StepEvaluate({S}){
       <FilesPanel S={S}/>
       {S.loadedName && <div className="note">Loaded: <b>{S.loadedName}</b>.</div>}
 
+      <h3>Test results <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· enter audited values beside each book value</span></h3>
       {!ev.ready ? (
         <div className="banner hold">
           <span className="b-t">⏳ {toGo} of {sel.items.length} to resolve</span>
@@ -1734,16 +1735,19 @@ function StepEvaluate({S}){
         </Dlg>
       )}
 
-      <details className="method"><summary>Projection methodology (Stringer bound)</summary>
+      <details className="method"><summary>How the limits are calculated (Stringer method)</summary>
         <div>
-          <b>Sample items:</b> tainting = <code>(book − audited) ÷ book</code>, capped at ±100% for the maths
-          (any excess is disclosed separately); projected = <code>tainting × interval</code>.
-          <b> Key items:</b> actual misstatement, uncapped. <b>Unable to test</b> = fully misstated (ASA 530.11);
-          <b>anomalies</b> excluded from projection but still actual misstatements (ASA 530.13).<br/><br/>
-          <b>UML</b> = <code>interval × [ R(0) + Σ taintᵢ × (R(i) − R(i−1)) ] + key-item errors</code>, taints ranked
-          largest first, <code>R(k)</code> = Poisson reliability factor at {sel.confidence}% confidence
-          (<code>R(0) = {ev.RF0.toFixed(2)}</code>). Over- and understatements are evaluated separately.
-          The CSV export shows this build-up line by line.
+          Every figure above explains itself on hover — each table cell shows its own calculation, and the
+          scorecards show how each limit is built (most likely error + cushion + incremental allowance).
+          What isn't shown there:<br/><br/>
+          <b>Errors are ranked, largest tainting first,</b> and each carries a risk premium on top of its
+          projected amount — the premiums come from published (Poisson) factors at {sel.confidence}% confidence
+          and shrink down the list, so the worst error carries the biggest premium. That is what builds the
+          incremental allowance.<br/><br/>
+          <b>Overstatements and understatements never offset.</b> Each direction gets its own ranking, its own
+          allowance and its own limit, and each is compared with tolerable misstatement on its own.<br/><br/>
+          <b>To check it by hand:</b> the evaluation CSV lists the build-up line by line — cushion, each ranked
+          error's contribution, key-item errors, total — so a reviewer can re-add both limits with a calculator.
         </div>
       </details>
 
