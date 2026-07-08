@@ -1286,7 +1286,8 @@ function StepSelect({S}){
         random start reproduce the selection exactly.</div>
       </details>
 
-      <h3>Example documentation — sample selection <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· updates with your selections</span></h3>
+      <details className="method">
+      <summary>Example documentation — sample selection <span className="hint">· updates with your selections</span></summary>
       <div className="wp">
         <div className="lbl">Working-paper note — supplies &amp; services expenses</div>
         {noteReady ? <>
@@ -1302,6 +1303,7 @@ function StepSelect({S}){
         </> : <p className="muted">Load your population and choose the sample basis — this note will populate automatically.</p>}
         <p className="ref">Ref: ASA 530 para 8 &amp; Appendix 1/4; ASA 230 para 9.</p>
       </div>
+      </details>
 
       <FilesPanel S={S} pop={pop}/>
 
@@ -1651,8 +1653,8 @@ function StepEvaluate({S}){
           <div style={{marginTop:6}}>{
             exceedsOver&&exceedsUnder ? "Both limits exceed materiality — the population may be materially misstated. Propose adjustments, extend the sample, or investigate."
             : exceedsOver ? "The overstatement limit exceeds materiality — the population may be materially overstated. Propose adjustments, extend the sample, or investigate."
-            : exceedsUnder ? "The understatement limit exceeds materiality — the population may be materially understated. Investigate: this is a real flag even though MUS is weak at detecting understatement (see below)."
-            : "No evidence of material overstatement at the chosen confidence level. The understatement limit is also within materiality — but read the note below before relying on it."}</div>
+            : exceedsUnder ? "The understatement limit exceeds materiality — the population may be materially understated. Investigate: this is a real flag even though MUS is weak at detecting understatement (expand the note below)."
+            : "No evidence of material overstatement at the chosen confidence level. The understatement limit is also within materiality — but expand the note below before relying on it."}</div>
           {ev.counts.unable>0 && <div style={{marginTop:6,fontSize:12.5}}>{ev.counts.unable} item(s) could not be
             tested and are treated as fully misstated (ASA 530.11).</div>}
           {ev.excessOver>0 && <div style={{marginTop:6,fontSize:12.5,fontWeight:600}}>Note: sampled item(s) were misstated
@@ -1666,22 +1668,19 @@ function StepEvaluate({S}){
               : ' The actual errors still count as misstatements and are carried to the schedule.'}
             {ev.anomalies.length>1 && <b style={{color:'var(--bad)'}}> More than one anomaly is contradictory — anomalies
             are by definition extremely rare (ASA 530.13).</b>}</div>}
+          <details className="method" style={{marginTop:8}}>
+            <summary style={{color:'var(--warn-o)'}}>Reading the lower (understatement) limit</summary>
+            <div>MUS rarely selects understated items — an item recorded far too low is unlikely to be picked — so it has
+              <b> low power against understatement</b>. {ev.mleUnder>1e-6
+                ? <>The most likely understatement is <b>{money(ev.mleUnder)}</b>; treat the lower limit <b>{money(ev.lowerLimit)}</b> as indicative.</>
+                : <>No understatements were found in this sample, but that is <i>not</i> assurance of completeness — the lower limit of <b>{money(ev.lowerLimit)}</b> is only the minimum cushion.</>}
+              {' '}For real assurance over completeness, plan a separate directed test (e.g. a search for unrecorded liabilities
+              or a subsequent-payments review). A lower limit <i>above</i> materiality, however, is a genuine red flag. Details are in the CSV export.</div>
+          </details>
         </div>
       ) : (
         <div className="note"><b>Conclusion withheld</b> — {toGo} item(s) unresolved. An item you cannot test counts
           as <i>misstated</i>, not clean (ASA 530.11) — enter audited values, or mark it <b>U</b>.</div>
-      )}
-
-      {ev.ready && (
-        <div className="callout" style={{background:'var(--warn-o-bg)',borderColor:'var(--warn-o-stroke)'}}>
-          <div className="ttl" style={{color:'var(--warn-o)'}}>Reading the lower (understatement) limit</div>
-          <div>MUS rarely selects understated items — an item recorded far too low is unlikely to be picked — so it has
-            <b> low power against understatement</b>. {ev.mleUnder>1e-6
-              ? <>The most likely understatement is <b>{money(ev.mleUnder)}</b>; treat the lower limit <b>{money(ev.lowerLimit)}</b> as indicative.</>
-              : <>No understatements were found in this sample, but that is <i>not</i> assurance of completeness — the lower limit of <b>{money(ev.lowerLimit)}</b> is only the minimum cushion.</>}
-            {' '}For real assurance over completeness, plan a separate directed test (e.g. a search for unrecorded liabilities
-            or a subsequent-payments review). A lower limit <i>above</i> materiality, however, is a genuine red flag. Details are in the CSV export.</div>
-        </div>
       )}
 
       <div className="row no-print">
@@ -1766,7 +1765,8 @@ function StepEvaluate({S}){
         </div>
       </details>
 
-      <h3>Example documentation — projection of errors <span className="hint" style={{textTransform:'none',letterSpacing:0}}>· updates as you enter results</span></h3>
+      <details className="method">
+      <summary>Example documentation — projection of errors <span className="hint">· updates as you enter results</span></summary>
       <div className="wp">
         <div className="lbl">Working-paper note — supplies &amp; services expenses</div>
         <p><b>Test:</b> {sel.items.length} invoices for supplies and services ({basisNeg?'credit/negative':'positive'} items) tested for {basisNeg?'misstatement':'overstatement'} by agreeing each invoice to supporting records.</p>
@@ -1790,6 +1790,7 @@ function StepEvaluate({S}){
         <p>{Math.abs(ev.netMLE)>1e-6? 'The most likely error of '+money(ev.netMLE)+' was carried to the schedule of misstatements. ' : ''}Performed by {S.username||'[initials]'} on {new Date().toLocaleDateString('en-AU')}.</p>
         <p className="ref">Ref: ASA 530 para 12–15; ASA 450 (evaluation of misstatements).</p>
       </div>
+      </details>
 
       <div className="row no-print" style={{marginTop:16}}>
         <button className="btn" onClick={()=>S.set({step:2})}>&larr; Select sample</button>
@@ -2152,6 +2153,13 @@ function App(){
     window.addEventListener('beforeunload',h);
     return ()=>window.removeEventListener('beforeunload',h);
   },[st.selection,st.rawData]);
+  // open collapsed sections while printing (so working-paper notes etc. appear), then restore
+  useEffect(()=>{
+    const before=()=>{ document.querySelectorAll('details:not([open])').forEach(d=>{ d.dataset.autoOpened='1'; d.open=true; }); };
+    const after =()=>{ document.querySelectorAll('details[data-auto-opened]').forEach(d=>{ d.open=false; delete d.dataset.autoOpened; }); };
+    window.addEventListener('beforeprint',before); window.addEventListener('afterprint',after);
+    return ()=>{ window.removeEventListener('beforeprint',before); window.removeEventListener('afterprint',after); };
+  },[]);
   function resetSession(){
     try{ window.localStorage.removeItem(SESSION_KEY); }catch(e){}
     setSt(DEFAULT_ST);
