@@ -138,6 +138,9 @@
   .stat .v.big{font-size:23px}
   .statgrid{display:grid;gap:12px;grid-template-columns:repeat(4,1fr)}
   @media(max-width:720px){.statgrid{grid-template-columns:1fr 1fr}}
+  .eqgrid{display:grid;grid-template-columns:1fr 24px 1fr 24px 1fr 28px 1.18fr;gap:6px;align-items:stretch;min-width:780px}
+  .eqgrid .op{display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;color:var(--fg-4)}
+  .eqgrid .stat{display:flex;flex-direction:column;justify-content:center}
 
   .callout{border-radius:var(--radius-lg);padding:13px 16px;margin:14px 0;border:1px solid;color:var(--fg-2);font-size:13px}
   .callout.ok{background:var(--ok-bg);border-color:var(--ok-stroke)}
@@ -252,7 +255,7 @@ const {useState,useEffect,useMemo,useRef} = React;
 
 // Tool version — stamped on every export and working paper so a reperformer
 // knows which selection/evaluation rules produced a result.
-const TOOL_VERSION = "2.3 (07/07/2026)";
+const TOOL_VERSION = "2.4 (08/07/2026)";
 const SESSION_KEY  = "mus_session_v1";
 
 /* ============================================================
@@ -1361,6 +1364,9 @@ function StepEvaluate({S}){
   const exceedsOver =ev.uml>matDollar;                  // overstatement conclusion (primary MUS test)
   const exceedsUnder=ev.lowerLimit>matDollar;           // understatement conclusion (low power — see caveat)
   const exceeds=exceedsOver||exceedsUnder;
+  // incremental allowance for sampling risk = limit − most likely − cushion (≥0; max() guards float dust)
+  const incrOver =Math.max(0, ev.uml       -ev.mleOver -ev.basicPrecision);
+  const incrUnder=Math.max(0, ev.lowerLimit-ev.mleUnder-ev.basicPrecision);
   const errItems=ev.rows.filter(r=>(r.status==='tested'||r.status==='unable') && Math.abs(r.misst)>1e-6);
   const basisNeg=sel.sampleBasis==='negative';
   const toGo=ev.counts.untested+ev.counts.pending;
@@ -1429,13 +1435,15 @@ function StepEvaluate({S}){
       ["Tolerable misstatement / materiality",matDollar.toFixed(2)],
       ["Items — tested / unable / awaiting confirmation / untested",
         ev.counts.tested+" / "+ev.counts.unable+" / "+ev.counts.pending+" / "+ev.counts.untested],
+      ["Minimum error cushion (basic precision) — baseline sampling-risk allowance in both limits",ev.basicPrecision.toFixed(2)],
       ["Most likely overstatement",ev.mleOver.toFixed(2)],
-      ["Upper misstatement limit (overstatement)",ev.uml.toFixed(2)],
+      ["Incremental allowance for sampling risk (overstatement)",incrOver.toFixed(2)],
+      ["Upper misstatement limit = most likely overstatement + cushion + incremental allowance",ev.uml.toFixed(2)],
       ...(ev.anomalies.length? [["UML if anomalies treated as representative",ev.umlIncl.toFixed(2)]]:[]),
       ["Most likely understatement (indicative — MUS has low power against understatement)",ev.mleUnder.toFixed(2)],
-      ["Lower misstatement limit (understatement; indicative only)",ev.lowerLimit.toFixed(2)],
+      ["Incremental allowance for sampling risk (understatement)",incrUnder.toFixed(2)],
+      ["Lower misstatement limit (understatement; indicative only) = most likely understatement + cushion + incremental allowance",ev.lowerLimit.toFixed(2)],
       ["Net most likely error (carried to schedule of misstatements)",ev.netMLE.toFixed(2)],
-      ["Minimum error cushion (basic precision)",ev.basicPrecision.toFixed(2)],
       ["Conclusion", !ev.ready ? ("INCOMPLETE — "+toGo+" item(s) unresolved; conclusion withheld")
         : ((exceedsOver||exceedsUnder)
             ? ((exceedsOver?"overstatement UML":"")+(exceedsOver&&exceedsUnder?" and ":"")+(exceedsUnder?"understatement LML":"")+" exceed(s) tolerable misstatement")
@@ -1579,24 +1587,37 @@ function StepEvaluate({S}){
       {view.length===0 && <div className="note">No items match this filter.</div>}
 
       <h3>Projection to the population</h3>
-      <div className="grid g2" style={{alignItems:'start'}}>
-        <div style={{maxWidth:280}}>
-          <label className="fld">Tolerable misstatement / materiality ($)<Q t="Your actual tolerable misstatement in dollars — normally set from financial-statement materiality, not from this population. The default is only a convenience."/></label>
-          <NumText value={S.materialityDollar} ariaLabel="Tolerable misstatement"
-            onChange={v=>{matTouched.current=true; S.set({materialityDollar:v});}}/>
-          <div className="hint" style={{marginTop:5}}>Default = {sel.materiality}% × population book value
-            = {money(sel.total*sel.materiality/100)}.</div>
-        </div>
-        <div className="statgrid" style={{gridTemplateColumns:'1fr 1fr'}}>
-          <Stat k="Minimum error cushion" v={money(ev.basicPrecision)}
-            style={{gridColumn:'1 / -1', justifySelf:'center', width:'calc(50% - 6px)'}}
-            title="The buffer both limits carry even when zero errors are found — a clean sample can never prove the population is error-free. RF(0) × interval. (Technically: basic precision.)"/>
+      <div style={{maxWidth:280}}>
+        <label className="fld">Tolerable misstatement / materiality ($)<Q t="Your actual tolerable misstatement in dollars — normally set from financial-statement materiality, not from this population. The default is only a convenience."/></label>
+        <NumText value={S.materialityDollar} ariaLabel="Tolerable misstatement"
+          onChange={v=>{matTouched.current=true; S.set({materialityDollar:v});}}/>
+        <div className="hint" style={{marginTop:5}}>Default = {sel.materiality}% × population book value
+          = {money(sel.total*sel.materiality/100)}.</div>
+      </div>
+      <div className="scrollx" style={{marginTop:12}}>
+        <div className="eqgrid">
           <Stat k="Most likely overstatement" v={money(ev.mleOver)} tone="var(--navy)"
             title="Best estimate of overstatement in the population: projected sample overstatements plus actual key-item overstatements. A point estimate, not the worst case."/>
+          <span className="op">+</span>
+          <Stat k="Minimum error cushion" v={money(ev.basicPrecision)}
+            title="Baseline allowance for sampling risk — carried even when zero errors are found, because a clean sample can never prove the population is error-free. RF(0) × interval. (Technically: basic precision.)"/>
+          <span className="op">+</span>
+          <Stat k="Incremental allowance" v={money(incrOver)}
+            title="Added allowance for sampling risk — the extra margin that grows as errors are found: each ranked error carries a risk premium above its projected amount. Zero errors found = zero incremental allowance."/>
+          <span className="op">=</span>
           <Stat k="Upper misstatement limit" big v={money(ev.uml)} tone={exceedsOver?'var(--warn)':'var(--ok)'}
-            title={"Most likely overstatement plus a buffer for sampling risk (Stringer bound). We are "+sel.confidence+"% confident the true overstatement is no more than this. This is the primary MUS conclusion — compare with tolerable misstatement."}/>
+            title={"Most likely overstatement plus the full allowance for sampling risk (cushion + incremental — the Stringer bound). We are "+sel.confidence+"% confident the true overstatement is no more than this. The primary MUS conclusion — compare with tolerable misstatement."}/>
+        </div>
+        <div className="eqgrid" style={{marginTop:8}}>
           <Stat k="Most likely understatement" v={money(ev.mleUnder)} tone="var(--navy)"
             title="Best estimate of understatement, projected the same way. Indicative only — MUS rarely selects understated items, so it has low power against understatement."/>
+          <span className="op">+</span>
+          <Stat k="Minimum error cushion" v={money(ev.basicPrecision)}
+            title="Baseline allowance for sampling risk — the same cushion in both limits. RF(0) × interval. (Technically: basic precision.)"/>
+          <span className="op">+</span>
+          <Stat k="Incremental allowance" v={money(incrUnder)}
+            title="Added allowance for sampling risk on the understatement side — grows as understatements are found. Zero understatements = zero incremental allowance."/>
+          <span className="op">=</span>
           <Stat k="Lower misstatement limit" big v={money(ev.lowerLimit)} tone={exceedsUnder?'var(--warn)':'var(--ok)'}
             title="The understatement equivalent of the upper limit — the same Stringer maths applied to understatement taints. A LOW figure is not assurance over completeness; a figure ABOVE materiality is a genuine red flag. Support with a separate completeness test."/>
         </div>
@@ -1712,9 +1733,11 @@ function StepEvaluate({S}){
         <p><b>Misstatements found:</b> {errItems.length===0
           ? 'none — audited values agreed to recorded values.'
           : errItems.length+' ('+errItems.slice(0,6).map(e=>e.ref).join(', ')+(errItems.length>6?', …':'')+').'}</p>
-        <p><b>Projection:</b> overstatement — most likely {money(ev.mleOver)}, upper limit <b>{money(ev.uml)}</b>;
-          understatement — most likely {money(ev.mleUnder)}, lower limit {money(ev.lowerLimit)};
-          minimum error cushion (basic precision) {money(ev.basicPrecision)}; net most likely error {money(ev.netMLE)}; at {sel.confidence}% confidence.</p>
+        <p><b>Projection (at {sel.confidence}% confidence):</b> upper misstatement limit <b>{money(ev.uml)}</b> =
+          most likely overstatement {money(ev.mleOver)} + minimum error cushion (basic precision) {money(ev.basicPrecision)} +
+          incremental allowance {money(incrOver)}. Lower misstatement limit {money(ev.lowerLimit)} =
+          most likely understatement {money(ev.mleUnder)} + cushion + incremental allowance {money(incrUnder)}.
+          Net most likely error {money(ev.netMLE)}.</p>
         <p><b>Conclusion:</b> {!ev.ready
           ? '[conclusion withheld — '+toGo+' selected item(s) not yet resolved]'
           : exceedsOver

@@ -31,7 +31,10 @@ disclosed); **key items use their actual misstatement uncapped**. It evaluates *
 **most likely overstatement** and **upper misstatement limit (UML)**, and — evaluated separately — the
 **most likely understatement** and **lower misstatement limit (LML)**, plus the **minimum error cushion**
 (basic precision — the buffer both limits carry with zero errors found) and the **net most likely error**
-(carried to the schedule of misstatements). Both limits are compared with tolerable misstatement. Because MUS
+(carried to the schedule of misstatements). Each limit is displayed as an equation that foots:
+*most likely + minimum error cushion + incremental allowance = limit*, where the **incremental allowance**
+is the extra sampling-risk margin that grows as errors are found. Both limits are compared with tolerable
+misstatement. Because MUS
 has **low power against understatement**, the LML carries a plain-English caution — a low LML is not assurance
 over completeness (plan a separate completeness test), though an LML above materiality is a genuine red flag.
 The evaluation CSV includes the ranked-taint **workings for both limits** so a reviewer can re-add either bound
