@@ -1486,8 +1486,8 @@ function StepEvaluate({S}){
     return <span className="pill st-ok">Tested</span>;
   };
   const view=ev.rows.map((r,i)=>({r,i}))
-    .filter(({r})=> filter==='untested' ? (r.status==='untested'||r.status==='pending')
-      : filter==='errors' ? ((r.status==='tested'||r.status==='unable') && Math.abs(r.misst)>1e-6)
+    .filter(({r})=> filter==='untested' ? (r.status!=='tested')          // awaiting values, pending confirms, unable to test
+      : filter==='errors' ? (r.status==='tested' && Math.abs(r.misst)>1e-6)  // misstatements actually found by testing
       : true)
     .filter(({r})=> !q.trim()||String(r.ref).toLowerCase().includes(q.trim().toLowerCase()));
   // per-row hover explanations of the three calculated columns
@@ -1546,8 +1546,10 @@ function StepEvaluate({S}){
           {ev.counts.unable>0 && <> · {ev.counts.unable} unable</>}</span>
         <span style={{flex:1}}/>
         <div className="seg" style={{maxWidth:280}}>
-          {[['all','All'],['untested','Untested'],['errors','Errors']].map(([k,l])=>(
-            <button key={k} className={filter===k?'on':''} onClick={()=>setFilter(k)}>{l}</button>))}
+          {[['all','All','Every selected item'],
+            ['untested','Untested','Items without a tested value — awaiting entry, awaiting a >100% confirmation, or unable to test'],
+            ['errors','Errors','Misstatements actually found by testing (unable-to-test items are under Untested)']].map(([k,l,t])=>(
+            <button key={k} className={filter===k?'on':''} title={t} onClick={()=>setFilter(k)}>{l}</button>))}
         </div>
         <input type="text" placeholder="Search…" value={q} onChange={e=>setQ(e.target.value)}
           style={{maxWidth:150}} aria-label="Search sample items"/>
