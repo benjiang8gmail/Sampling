@@ -755,9 +755,10 @@ function TableBlock({eeKey,label,accent,selConf,selMat,active}){
   );
 }
 
-function Stat({k,v,big,tone,title,onClick}){
+function Stat({k,v,big,tone,title,onClick,style}){
+  const base = onClick?{cursor:'pointer'}:(title?{cursor:'help'}:undefined);
   return <div className="stat" title={title} onClick={onClick}
-    style={onClick?{cursor:'pointer'}:(title?{cursor:'help'}:undefined)}><div className="k">{k}</div>
+    style={{...base, ...style}}><div className="k">{k}</div>
     <div className={"v"+(big?" big":"")} style={tone?{color:tone}:{}}>{v}</div></div>;
 }
 // "?" explainer chip
@@ -1587,6 +1588,9 @@ function StepEvaluate({S}){
             = {money(sel.total*sel.materiality/100)}.</div>
         </div>
         <div className="statgrid" style={{gridTemplateColumns:'1fr 1fr'}}>
+          <Stat k="Minimum error cushion" v={money(ev.basicPrecision)}
+            style={{gridColumn:'1 / -1', justifySelf:'center', width:'calc(50% - 6px)'}}
+            title="The buffer both limits carry even when zero errors are found — a clean sample can never prove the population is error-free. RF(0) × interval. (Technically: basic precision.)"/>
           <Stat k="Most likely overstatement" v={money(ev.mleOver)} tone="var(--navy)"
             title="Best estimate of overstatement in the population: projected sample overstatements plus actual key-item overstatements. A point estimate, not the worst case."/>
           <Stat k="Upper misstatement limit" big v={money(ev.uml)} tone={exceedsOver?'var(--warn)':'var(--ok)'}
@@ -1595,10 +1599,6 @@ function StepEvaluate({S}){
             title="Best estimate of understatement, projected the same way. Indicative only — MUS rarely selects understated items, so it has low power against understatement."/>
           <Stat k="Lower misstatement limit" big v={money(ev.lowerLimit)} tone={exceedsUnder?'var(--warn)':'var(--ok)'}
             title="The understatement equivalent of the upper limit — the same Stringer maths applied to understatement taints. A LOW figure is not assurance over completeness; a figure ABOVE materiality is a genuine red flag. Support with a separate completeness test."/>
-          <Stat k="Net most likely error" v={money(ev.netMLE)} tone="var(--navy)"
-            title="Overstatements net of understatements — the single best estimate of total error, carried to your schedule of uncorrected misstatements."/>
-          <Stat k="Minimum error cushion" v={money(ev.basicPrecision)}
-            title="The buffer both limits carry even when zero errors are found — a clean sample can never prove the population is error-free. RF(0) × interval. (Technically: basic precision.)"/>
         </div>
       </div>
 
