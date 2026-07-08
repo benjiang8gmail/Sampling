@@ -1647,9 +1647,9 @@ function StepEvaluate({S}){
             ? "⚠ Projected misstatement may exceed materiality"
             : "✓ Within materiality"}</div>
           <div><b>Overstatement:</b> upper limit <b>{money(ev.uml)}</b> is {exceedsOver?"above":"below"} tolerable
-            misstatement <b>{money(matDollar)}</b>{matDollar>0?<> ({pct(ev.uml/matDollar)})</>:null}.</div>
+            misstatement <b>{money(matDollar)}</b>.</div>
           <div style={{marginTop:4}}><b>Understatement:</b> lower limit <b>{money(ev.lowerLimit)}</b> is {exceedsUnder?"above":"below"} tolerable
-            misstatement <b>{money(matDollar)}</b>{matDollar>0?<> ({pct(ev.lowerLimit/matDollar)})</>:null}.</div>
+            misstatement <b>{money(matDollar)}</b>.</div>
           <div style={{marginTop:6}}>{
             exceedsOver&&exceedsUnder ? "Both limits exceed materiality — the population may be materially misstated. Propose adjustments, extend the sample, or investigate."
             : exceedsOver ? "The overstatement limit exceeds materiality — the population may be materially overstated. Propose adjustments, extend the sample, or investigate."
