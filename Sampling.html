@@ -1688,7 +1688,6 @@ function StepEvaluate({S}){
       <div className="row no-print">
         <SaveSampleControls S={S} onMsg={setSaveMsg}/>
         <button className="btn ghost" onClick={exportEval}>Download evaluation (CSV)</button>
-        <button className="btn ghost" onClick={()=>window.print()}>Print working paper</button>
         {evalMsg && <span className="hint">{evalMsg}</span>}
       </div>
       {saveMsg && <div className={saveMsg.t==='err'?'err':'note'} style={{marginTop:8}}>{saveMsg.m}</div>}
@@ -1983,21 +1982,6 @@ function StepDocs({S}){
       <p className="sub">What to record to meet the AUASB standards. Confirm paragraph references against the current
         compiled standards and apply your office methodology.</p>
 
-      <div className="callout info">
-        <div className="ttl">The standards that apply</div>
-        <ul>
-          <li><b><AsaRef>ASA 530</AsaRef> Audit Sampling</b> — design/size/select (para 6–8), perform (9–11),
-            misstatements (12–13), project (14), evaluate (15); MUS is value-weighted selection (Appendix 1 &amp; 4).</li>
-          <li><b><AsaRef>ASA 230</AsaRef> Audit Documentation</b> — an experienced auditor with no prior connection
-            should understand the work, results and judgements (para 8); record what was tested, and who did and
-            reviewed it and when (para 9).</li>
-          <li><b><AsaRef>ASA 320</AsaRef> Materiality</b> &amp; <b><AsaRef>ASA 450</AsaRef> Evaluation of Misstatements</b> —
-            set tolerable misstatement; accumulate and evaluate misstatements against materiality.</li>
-          <li><b><AsaRef>ASA 330</AsaRef></b> / <b><AsaRef>ASA 500</AsaRef></b> — a substantive procedure that gives
-            sufficient appropriate audit evidence.</li>
-        </ul>
-      </div>
-
       <h3 style={{fontSize:12}}>Part A — what to record</h3>
       <div className="note">Steps 1–3 each show a live working-paper note that fills in with your figures;
         <b> Part B</b> below assembles them into one model workpaper.</div>
@@ -2045,6 +2029,7 @@ function StepDocs({S}){
             +'.ref{color:#666666;font-size:9pt} .muted{color:#888888}'
             +'table{border-collapse:collapse;margin:8pt 0} th,td{border:1pt solid #bbbbbb;padding:3pt 6pt;font-size:9pt;text-align:left}'
             +'th{background:#eef3fa} td.num,th.num{text-align:right}'
+            +'ul{margin:2pt 0 8pt 16pt;padding:0} li{margin:2pt 0}'
             +'</style></head><body>'+el.innerHTML+'</body></html>';
           const res=await saveTextFile(safeFileName(baseName(S.username,(sel&&sel.sampleBasis)||'positive')+'-working-paper')+'.doc',
             html, 'application/msword', '.doc', 'Word document');
@@ -2062,40 +2047,42 @@ function StepDocs({S}){
           monetary-unit sample of recorded transactions and projecting the misstatements found to the population
           (ASA 530).</p>
 
-        <p><b>2 · Population tested.</b> {sel? <>{num0(sel.popCount)} items totalling <b>{money(sel.total)}</b>
-            ({neg?'negative':'positive'} values, amount column “{sel.amountColName||'—'}”, references
-            “{sel.refColName||'—'}”, in file order). Excluded and tested separately — totals rows:
-            {' '}{sel.exclusions?sel.exclusions.totals:0}; wrong sign/zero: {sel.exclusions?sel.exclusions.wrongSign:0};
-            unparsed: {sel.exclusions?sel.exclusions.unparsed:0}.</>
-          : <span className="muted">[load the population on the Select step]</span>}
-          {' '}Fingerprint: {fp? <>{fp.algo} <span style={{fontFamily:'var(--mono)',fontSize:11}}>{fp.hash}</span>{fp.rows!=null && <> · {num0(fp.rows)} rows · {money(fp.total)}</>}</>
-          : <span className="muted">[computed when a population is loaded]</span>}.
-          Completeness: population agreed to [GL / trial balance ref] before selection.</p>
+        <p style={{marginBottom:2}}><b>2 · Population tested.</b></p>
+        <ul className="rec">
+          {sel? <>
+            <li>{num0(sel.popCount)} items totalling <b>{money(sel.total)}</b> — {neg?'negative':'positive'} values,
+              amount column “{sel.amountColName||'—'}”, references “{sel.refColName||'—'}”, file order.</li>
+            <li>Excluded and tested separately: {sel.exclusions?sel.exclusions.totals:0} totals row(s) ·
+              {' '}{sel.exclusions?sel.exclusions.wrongSign:0} wrong sign/zero · {sel.exclusions?sel.exclusions.unparsed:0} unparsed.</li>
+          </> : <li><span className="muted">[load the population on the Select step]</span></li>}
+          <li>Completeness: population agreed to [GL / trial balance ref] before selection.</li>
+        </ul>
 
-        <p><b>3 · Parameters &amp; assumptions</b> (sufficient for a reviewer to reperform and reach the same
-          conclusion): {S.ee.toLowerCase()} expected error; <b>{S.confidence}%</b> confidence (accepted sampling risk
-          {' '}{100-S.confidence}%); materiality {S.materiality}% of population — tolerable misstatement
-          {' '}<b>{money(matDollar)}</b>; sample size <b>{SAMPLE_TABLES[S.ee][S.confidence][S.materiality]}</b> per the
-          DST table. Two-stratum MUS (tool v{(sel&&sel.toolVersion)||TOOL_VERSION}): items ≥ the sampling interval
-          tested in full (key items); remainder selected every interval-dollars from the random start.
-          {sel && <> Interval <b>{money(sel.interval)}</b>; random start <b>{sel.randomStart>0?money(sel.randomStart):'[not recorded]'}</b>;
-          drawn {sel.runAt? new Date(sel.runAt).toLocaleDateString('en-AU'):'[date]'}.</>}
-          {' '}Assumptions: taintings capped at ±100% for projection; items that cannot be tested are treated as fully
-          misstated (ASA 530.11); anomalies excluded from projection only with documented justification (ASA 530.13).
-          <b> Reperformance:</b> the same population (fingerprint above, file order), interval and random start
-          reproduce the identical selection; the selection and evaluation CSVs at [WP ref] carry all settings and
-          workings.</p>
+        <p style={{marginBottom:2}}><b>3 · Parameters &amp; assumptions</b> — a reviewer can reperform from these:</p>
+        <ul className="rec">
+          <li>{S.ee} expected error · <b>{S.confidence}%</b> confidence (sampling risk {100-S.confidence}%) ·
+            materiality {S.materiality}% — tolerable misstatement <b>{money(matDollar)}</b>.</li>
+          <li>Sample size <b>{SAMPLE_TABLES[S.ee][S.confidence][S.materiality]}</b> per the DST table; two-stratum MUS,
+            tool v{(sel&&sel.toolVersion)||TOOL_VERSION}.</li>
+          {sel && <li>Sampling interval <b>{money(sel.interval)}</b> · random start
+            <b> {sel.randomStart>0?money(sel.randomStart):'[not recorded]'}</b> · drawn
+            {' '}{sel.runAt? new Date(sel.runAt).toLocaleDateString('en-AU'):'[date]'}.</li>}
+          <li>Items ≥ the interval tested in full (key items); the rest selected every interval-dollars from the
+            random start.</li>
+          <li>Taintings capped at ±100% for projection · unable to test = fully misstated (ASA 530.11) · anomalies
+            excluded only with documented justification (ASA 530.13).</li>
+        </ul>
 
-        <p><b>4 · Work performed.</b> {sel? <>{num0(sel.items.length)} items selected —
-            {' '}{num0(sel.items.filter(i=>i.isKey).length)} key item(s) covering
-            {' '}{money(sel.items.filter(i=>i.isKey).reduce((s,x)=>s+x.amount,0))} and
-            {' '}{num0(sel.items.filter(i=>!i.isKey).length)} MUS selections.</>
-          : <span className="muted">[draw the sample on the Select step]</span>}
-          {' '}Each selected item agreed to supporting evidence [describe — e.g. supplier invoice, proof of payment,
-          receipt of goods/services].
-          {ev && <> {ev.counts.tested+ev.counts.unable} of {sel.items.length} resolved ({ev.counts.unable} unable to
-          test — ASA 530.11; {ev.anomalies.length} anomal{ev.anomalies.length===1?'y':'ies'} — ASA 530.13, justification
-          retained). Misstatements found: <b>{ev.rows.filter(r=>(r.status==='tested'||r.status==='unable')&&Math.abs(r.misst)>1e-6).length}</b>.</>}</p>
+        <p style={{marginBottom:2}}><b>4 · Work performed.</b></p>
+        <ul className="rec">
+          {sel? <li>{num0(sel.items.length)} items selected — {num0(sel.items.filter(i=>i.isKey).length)} key item(s)
+              covering {money(sel.items.filter(i=>i.isKey).reduce((s,x)=>s+x.amount,0))} + {num0(sel.items.filter(i=>!i.isKey).length)} MUS selections.</li>
+            : <li><span className="muted">[draw the sample on the Select step]</span></li>}
+          <li>Each item agreed to supporting evidence [e.g. supplier invoice, proof of payment, receipt of goods/services].</li>
+          {ev && <li>{ev.counts.tested+ev.counts.unable} of {sel.items.length} resolved — {ev.counts.unable} unable to
+            test (ASA 530.11) · {ev.anomalies.length} anomal{ev.anomalies.length===1?'y':'ies'} (ASA 530.13).
+            Misstatements found: <b>{ev.rows.filter(r=>(r.status==='tested'||r.status==='unable')&&Math.abs(r.misst)>1e-6).length}</b>.</li>}
+        </ul>
 
         <details className="method" style={{margin:'10px 0'}}>
           <summary><b>5 · Sample schedule</b> — items tested with book and audited values (ASA 230.9)</summary>
@@ -2122,15 +2109,18 @@ function StepDocs({S}){
           ) : <div className="muted" style={{marginTop:6}}>[draw the sample and enter audited values — the schedule fills in here]</div>}
         </details>
 
-        <p><b>6 · Results &amp; evaluation.</b> {ev? <>
-            Upper misstatement limit <b>{money(ev.uml)}</b> = most likely overstatement {money(ev.mleOver)} + minimum
-            error cushion {money(ev.basicPrecision)} + incremental allowance {money(incrOver)}
-            {ev.anomalies.length>0 && <> (UML if anomalies treated as representative: {money(ev.umlIncl)})</>}.
-            Lower misstatement limit {money(ev.lowerLimit)} = most likely understatement {money(ev.mleUnder)} + cushion +
-            incremental allowance {money(incrUnder)}; at {sel.confidence}% confidence. Net most likely error
-            {' '}<b>{money(ev.netMLE)}</b> carried to the schedule of misstatements. MUS has low power against
-            understatement — separate completeness test at [WP ref].</>
-          : <span className="muted">[enter audited values on the Evaluate step]</span>}</p>
+        <p style={{marginBottom:2}}><b>6 · Results &amp; evaluation.</b></p>
+        <ul className="rec">
+          {ev? <>
+            <li>Upper misstatement limit <b>{money(ev.uml)}</b> = most likely overstatement {money(ev.mleOver)} +
+              minimum error cushion {money(ev.basicPrecision)} + incremental allowance {money(incrOver)}; at
+              {' '}{sel.confidence}% confidence{ev.anomalies.length>0 && <> (if anomalies treated as representative: {money(ev.umlIncl)})</>}.</li>
+            <li>Lower misstatement limit {money(ev.lowerLimit)} = most likely understatement {money(ev.mleUnder)} +
+              cushion + incremental allowance {money(incrUnder)}.</li>
+            <li>Net most likely error <b>{money(ev.netMLE)}</b> carried to the schedule of misstatements.</li>
+            <li>MUS has low power against understatement — separate completeness test at [WP ref].</li>
+          </> : <li><span className="muted">[enter audited values on the Evaluate step]</span></li>}
+        </ul>
 
         <p><b>7 · Conclusion.</b> {ev? (!ev.ready
             ? <span className="muted">[withheld — {ev.counts.untested+ev.counts.pending} item(s) unresolved]</span>
