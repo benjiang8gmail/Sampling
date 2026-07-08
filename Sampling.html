@@ -1103,12 +1103,6 @@ function StepSelect({S}){
           <input type="checkbox" checked={S.hasHeader} onChange={e=>S.set({hasHeader:e.target.checked})}/>
           First row is a header
         </label>
-        <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12.5}}>
-          <input type="checkbox" checked={!!S.sortByRef}
-            onChange={e=>S.set({sortByRef:e.target.checked, selection:null, intervalTouched:false})}/>
-          Sort by reference before selecting
-          <Q t="Orders the population by the reference column before selection, so the selection order is reconstructable from the data itself — recommended for reperformance. Off = rows are used in file order."/>
-        </label>
         {S.rawData && <button className="btn ghost sm" onClick={()=>S.set({rawData:'',selection:null})}>Clear</button>}
       </div>
       {fileMsg && <div className={fileMsg.t==='ok'?'note':'err'} style={{marginBottom:8}}>{fileMsg.m}</div>}
@@ -1237,8 +1231,6 @@ function StepSelect({S}){
       <div className="row" style={{marginTop:16}}>
         <button className="btn primary" onClick={doSelect}
           disabled={!intervalOk||!startOk||pop.count===0}>Draw sample</button>
-        {sel && <button className="btn ghost" onClick={exportSel}>Download selected sample (CSV)</button>}
-        {sel && <button className="btn teal" onClick={()=>S.set({step:3})}>Enter audited values &rarr;</button>}
       </div>
       {pop.count===0 && parsed.length>0 && <div className="err">No {pop.wantNeg?"negative":"positive"} values found — check the amount column and the sample basis.</div>}
 
@@ -1253,8 +1245,8 @@ function StepSelect({S}){
           <div className="row" style={{margin:'6px 0'}}>
             <input type="text" placeholder="Search reference…" value={selQ} onChange={e=>setSelQ(e.target.value)}
               style={{maxWidth:220}} aria-label="Search selected sample"/>
-            <div className="seg" style={{maxWidth:300}}>
-              {[[null,'Selection order'],['ref','Reference'],['amt','Amount ↓']].map(([k,l])=>(
+            <div className="seg" style={{maxWidth:220}}>
+              {[[null,'Selection order'],['amt','Amount ↓']].map(([k,l])=>(
                 <button key={String(k)} className={selSort===k?'on':''} onClick={()=>setSelSort(k)}>{l}</button>))}
             </div>
           </div>
@@ -2095,7 +2087,8 @@ function StepDocs({S}){
       <ul className="rec">
         <li><b>Keep the source file</b>; its <b>fingerprint</b> (row count, total, checksum) is written into every
           export — a match proves "same population".</li>
-        <li><b>Pin down the order</b> — tick <i>Sort by reference before selecting</i>, or record that file order was used.</li>
+        <li><b>Pin down the order</b> — the tool selects in file order, so retain the file as supplied (its order is
+          recorded in every export).</li>
         <li><b>Keep the exports</b> — the selection CSV records every setting and the items tested; the evaluation CSV
           shows the workings so the bound can be re-added by hand.</li>
       </ul>
