@@ -1490,16 +1490,36 @@ function StepEvaluate({S}){
     return <span className="pill st-ok">Tested</span>;
   };
   const view=ev.rows.map((r,i)=>({r,i}))
-    .filter(({r})=> filter==='all' ? true
-      : filter==='untested' ? (r.status==='untested'||r.status==='pending')
+    .filter(({r})=> filter==='untested' ? (r.status==='untested'||r.status==='pending')
       : filter==='errors' ? ((r.status==='tested'||r.status==='unable') && Math.abs(r.misst)>1e-6)
-      : (r.status==='pending'||r.status==='unable'||r.isAnomaly||r.capped))
+      : true)
     .filter(({r})=> !q.trim()||String(r.ref).toLowerCase().includes(q.trim().toLowerCase()));
+  // per-row hover explanations of the three calculated columns
+  const tMisst=r=>{
+    if(r.status==='unable') return "Unable to test — treated as fully misstated (ASA 530.11): misstatement = book value "+money(r.book);
+    if(r.status!=='tested'&&r.status!=='pending') return "";
+    return "Book "+money(r.book)+" − audited "+money(r.audited)+" = "+money(r.misst)
+      +(r.misst>1e-6?" (overstatement)":r.misst<-1e-6?" (understatement)":" (no error)");
+  };
+  const tTaint=r=>{
+    if(r.isKey) return "Key item — examined in full, so the actual misstatement is used; no tainting projection";
+    if(r.status==='unable') return "Unable to test — tainting set to 100% (fully misstated, ASA 530.11)";
+    if(r.status!=='tested'&&r.status!=='pending') return "";
+    return "Misstatement "+money(r.misst)+" ÷ book "+money(r.book)+" = "+(r.rawTaint*100).toFixed(1)+"%"
+      +(r.capped?" — capped at ±100% for the projection maths (the excess is disclosed separately)":"");
+  };
+  const tProj=r=>{
+    if(r.status!=='tested'&&r.status!=='unable') return "";
+    if(r.isAnomaly) return "Anomaly (ASA 530.13) — the actual error "+money(r.misst)+" still counts as a misstatement but is excluded from the projection";
+    if(r.isKey) return "Key item — actual misstatement, uncapped: "+money(r.projected)+" (no projection needed: 100% examined)";
+    return "Tainting "+(r.taint*100).toFixed(1)+"% × interval "+money(sel.interval)+" = "+money(r.projected);
+  };
 
   return (
     <div className="card">
       <h2><span className="step-no">Step 3.</span> Evaluate &amp; project errors</h2>
       <p className="sub">Enter what each item should have been — errors are projected to the population.</p>
+      <FilesPanel S={S}/>
       {S.loadedName && <div className="note">Loaded: <b>{S.loadedName}</b>.</div>}
 
       {!ev.ready ? (
@@ -1528,8 +1548,8 @@ function StepEvaluate({S}){
           {ev.counts.pending>0 && <> · <b style={{color:'var(--bad)'}}>{ev.counts.pending} to confirm</b></>}
           {ev.counts.unable>0 && <> · {ev.counts.unable} unable</>}</span>
         <span style={{flex:1}}/>
-        <div className="seg" style={{maxWidth:360}}>
-          {[['all','All'],['untested','Untested'],['errors','Errors'],['flags','Flagged']].map(([k,l])=>(
+        <div className="seg" style={{maxWidth:280}}>
+          {[['all','All'],['untested','Untested'],['errors','Errors']].map(([k,l])=>(
             <button key={k} className={filter===k?'on':''} onClick={()=>setFilter(k)}>{l}</button>))}
         </div>
         <input type="text" placeholder="Search…" value={q} onChange={e=>setQ(e.target.value)}
@@ -1560,11 +1580,12 @@ function StepEvaluate({S}){
                     value={S.audited[r.origIndex]??''} onChange={e=>setAud(r.origIndex,e.target.value)}/>
                 </td>
                 <td>{stPill(r)}</td>
-                <td className={"num "+((r.status==='tested'||r.status==='unable')?(r.misst>0?"miss-pos":r.misst<0?"miss-neg":""):"")}>
+                <td title={tMisst(r)||undefined}
+                  className={"num "+((r.status==='tested'||r.status==='unable')?(r.misst>0?"miss-pos":r.misst<0?"miss-neg":""):"")}>
                   {(r.status==='tested'||r.status==='unable')?money(r.misst):'—'}</td>
-                <td className="num">{(r.status!=='tested'&&r.status!=='unable')||r.isKey ? '—'
+                <td className="num" title={tTaint(r)||undefined}>{(r.status!=='tested'&&r.status!=='unable')||r.isKey ? '—'
                   : (r.taint*100).toFixed(1)+'%'+(r.capped?' ⚠':'')}</td>
-                <td className="num">{(r.status==='tested'||r.status==='unable')?money(r.projected):'—'}</td>
+                <td className="num" title={tProj(r)||undefined}>{(r.status==='tested'||r.status==='unable')?money(r.projected):'—'}</td>
                 <td><span className={"pill "+(r.isKey?"key":"smp")}
                   title={r.isKey?"At or above the interval — examined in full":"Selected by probability proportional to size"}>{r.isKey?"Key":"Sample"}</span></td>
                 <td>
@@ -1750,8 +1771,6 @@ function StepEvaluate({S}){
         <p>{Math.abs(ev.netMLE)>1e-6? 'The most likely error of '+money(ev.netMLE)+' was carried to the schedule of misstatements. ' : ''}Performed by {S.username||'[initials]'} on {new Date().toLocaleDateString('en-AU')}.</p>
         <p className="ref">Ref: ASA 530 para 12–15; ASA 450 (evaluation of misstatements).</p>
       </div>
-
-      <FilesPanel S={S}/>
 
       <div className="row no-print" style={{marginTop:16}}>
         <button className="btn" onClick={()=>S.set({step:2})}>&larr; Select sample</button>
