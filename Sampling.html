@@ -2120,17 +2120,20 @@ function StepDocs({S}){
           </> : <li><span className="muted">[enter audited values on the Evaluate step]</span></li>}
         </ul>
 
-        <p><b>7 · Conclusion.</b> {ev? (!ev.ready
-            ? <span className="muted">[withheld — {ev.counts.untested+ev.counts.pending} item(s) unresolved]</span>
-            : <>{exceeds
-              ? <>the upper misstatement limit exceeds tolerable misstatement ({money(matDollar)}) — the population may
-                be materially {neg?'misstated':'overstated'}; adjustments proposed / testing extended as documented at [WP ref].</>
-              : <>the upper misstatement limit ({money(ev.uml)}) is below tolerable misstatement ({money(matDollar)});
-                no evidence the population is materially {neg?'misstated':'overstated'}. Errors found were carried to the
-                schedule of misstatements.</>}
-              {exceedsUnder && <b> The lower misstatement limit ({money(ev.lowerLimit)}) exceeds tolerable misstatement —
-                the population may be materially understated; investigated and completeness testing extended at [WP ref].</b>}</>)
-          : <span className="muted">[complete the evaluation]</span>}</p>
+        <p style={{marginBottom:2}}><b>7 · Conclusion</b> {ev&&ev.ready && <>(each limit vs tolerable misstatement {money(matDollar)})</>}:
+          {!ev? <span className="muted"> [complete the evaluation]</span>
+            : !ev.ready? <span className="muted"> [withheld — {ev.counts.untested+ev.counts.pending} item(s) unresolved]</span> : null}</p>
+        {ev&&ev.ready && <ul className="rec">
+          <li><b>Overstatement — upper misstatement limit {money(ev.uml)}</b> is {exceeds?'above':'below'} tolerable
+            misstatement, so {exceeds
+              ? <>the population may be materially {neg?'misstated':'overstated'}; adjustments proposed / testing extended at [WP ref].</>
+              : <>there is no evidence the population is materially {neg?'misstated':'overstated'}.</>}</li>
+          <li><b>Understatement — lower misstatement limit {money(ev.lowerLimit)}</b> is {exceedsUnder?'above':'below'} tolerable
+            misstatement, so {exceedsUnder
+              ? <>the population may be materially understated; investigated and completeness testing extended at [WP ref].</>
+              : <>this sample shows no material understatement. As MUS has low power against understatement, completeness is addressed by the separate test at [WP ref].</>}</li>
+          <li><b>Overall:</b> net most likely error {money(ev.netMLE)} and all misstatements found were carried to the schedule of misstatements.</li>
+        </ul>}
 
         <p><b>Prepared by:</b> {S.username||'[name]'} on {today}. <b>Reviewed by:</b> [name / date].</p>
         <p className="ref">Ref: ASA 530 para 6–15; ASA 230 para 8–9; ASA 320; ASA 450. Tool {TOOL_VERSION}.</p>
